@@ -5,17 +5,20 @@ const db = require('./config/db');
 
 // Підключаємо маршрути
 const authRoutes = require('./routes/authRoutes');
-const messageRoutes = require('./routes/messageRoutes'); // <--- ПЕРЕВІР, ЧИ Є ЦЕЙ РЯДОК
+const messageRoutes = require('./routes/messageRoutes');
 
 const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+
+// Збільшуємо ліміт для передачі великих зашифрованих зображень (Base64)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Використовуємо маршрути
 app.use('/api/auth', authRoutes);
-app.use('/api/messages', messageRoutes); // <--- ПЕРЕВІР, ЧИ Є ЦЕЙ РЯДОК
+app.use('/api/messages', messageRoutes);
 
 app.get('/', (req, res) => {
     res.send('Сервер безпечного чату працює!');
