@@ -1,5 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import api from '../utils/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { encryptMessage, decryptMessage } from '../utils/ciphers';
 import { getCurrentLocation } from '../utils/location';
@@ -88,11 +89,11 @@ function ChatPage() {
             ? `invite:${requestedInviteToken}`
             : `user:${requestedUserId}`;
         const request = requestedInviteToken
-            ? axios.post('http://localhost:5000/api/messages/invites/redeem', { token: requestedInviteToken }, {
+            ? api.post('/messages/invites/redeem', { token: requestedInviteToken }, {
                 headers: { Authorization: `Bearer ${token}` },
                 signal: controller.signal
             })
-            : axios.get(`http://localhost:5000/api/messages/users/${encodeURIComponent(requestedUserId)}/profile`, {
+            : api.get(`/messages/users/${encodeURIComponent(requestedUserId)}/profile`, {
                 headers: { Authorization: `Bearer ${token}` },
                 signal: controller.signal
             });
@@ -117,14 +118,14 @@ function ChatPage() {
     useEffect(() => {
         const fetchAll = async () => {
             if (!token) return;
-            axios.post('http://localhost:5000/api/messages/ping', {}, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+            api.post('/messages/ping', {}, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
             try {
                 if (selectedUser) {
-                    const msgRes = await axios.get(`http://localhost:5000/api/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    const msgRes = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
                     setMessages(prev => JSON.stringify(prev) !== JSON.stringify(msgRes.data) ? msgRes.data : prev);
                 }
 
-                const usersRes = await axios.get('http://localhost:5000/api/messages/users', { headers: { Authorization: `Bearer ${token}` } });
+                const usersRes = await api.get('/messages/users', { headers: { Authorization: `Bearer ${token}` } });
                 setUsers(prev => JSON.stringify(prev) !== JSON.stringify(usersRes.data) ? usersRes.data : prev);
             } catch (err) {
                 console.error(err);
@@ -144,7 +145,7 @@ function ChatPage() {
         const timeoutId = setTimeout(async () => {
             setUserSearchState({ query, status: 'loading', users: [] });
             try {
-                const response = await axios.get('http://localhost:5000/api/messages/users/search', {
+                const response = await api.get('/messages/users/search', {
                     params: { q: query },
                     headers: { Authorization: `Bearer ${token}` },
                     signal: controller.signal
@@ -301,18 +302,18 @@ function ChatPage() {
     const sendDataToServer = async (encryptedText) => {
         try {
             if (editingMsgId) {
-                await axios.put(`http://localhost:5000/api/messages/${editingMsgId}`, 
+                await api.put(`/messages/${editingMsgId}`, 
                     { encryptedText, cipherType },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
                 setEditingMsgId(null);
             } else {
-                await axios.post('http://localhost:5000/api/messages/send', 
+                await api.post('/messages/send', 
                     { receiverId: selectedUser.id, encryptedText, cipherType },
                     { headers: { Authorization: `Bearer ${token}` } }
                 );
             }
-            const res = await axios.get(`http://localhost:5000/api/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
             setMessages(res.data);
             setNewMessage('');
         } catch (err) {
@@ -325,7 +326,7 @@ function ChatPage() {
     const handleDelete = async (msgId) => {
         if (!window.confirm('Ви впевнені, що хочете видалити повідомлення?')) return;
         try {
-            await axios.delete(`http://localhost:5000/api/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
             setMessages(messages.filter(m => m.id !== msgId));
         } catch (err) {
             console.error("Помилка видалення", err);
@@ -342,13 +343,13 @@ function ChatPage() {
 
         const userId = selectedUser.id;
         try {
-            await axios.delete(`http://localhost:5000/api/messages/conversation/${userId}`, {
+            await api.delete(`/messages/conversation/${userId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setMessages([]);
             setSelectedUser(null);
             setConversationStatus('Переписку видалено. Контакт залишився у списку.');
-            const usersResponse = await axios.get('http://localhost:5000/api/messages/users', {
+            const usersResponse = await api.get('/messages/users', {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsers(usersResponse.data);
@@ -374,7 +375,7 @@ function ChatPage() {
     const handleTyping = (e) => {
         setNewMessage(e.target.value);
         if (selectedUser) {
-            axios.post('http://localhost:5000/api/messages/typing', { receiverId: selectedUser.id }, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+            api.post('/messages/typing', { receiverId: selectedUser.id }, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
         }
     };
 
@@ -397,9 +398,9 @@ function ChatPage() {
         const headers = { Authorization: `Bearer ${token}` };
         const query = userSearch.trim();
         const [usersResponse, searchResponse] = await Promise.all([
-            axios.get('http://localhost:5000/api/messages/users', { headers }),
+            api.get('/messages/users', { headers }),
             query
-                ? axios.get('http://localhost:5000/api/messages/users/search', { params: { q: query }, headers })
+                ? api.get('/messages/users/search', { params: { q: query }, headers })
                 : Promise.resolve(null)
         ]);
 
@@ -442,9 +443,9 @@ function ChatPage() {
             const { user } = contactDialog;
             const headers = { Authorization: `Bearer ${token}` };
             if (user.is_contact) {
-                await axios.put(`http://localhost:5000/api/messages/contacts/${user.id}`, { customName }, { headers });
+                await api.put(`/messages/contacts/${user.id}`, { customName }, { headers });
             } else {
-                await axios.post('http://localhost:5000/api/messages/contacts', { contactId: user.id, customName }, { headers });
+                await api.post('/messages/contacts', { contactId: user.id, customName }, { headers });
             }
             await refreshContactData(user.id);
             setContactDialog(null);
@@ -460,7 +461,7 @@ function ChatPage() {
         if (!window.confirm(`Видалити контакт «${user.username}»? Історія чату залишиться.`)) return;
 
         try {
-            await axios.delete(`http://localhost:5000/api/messages/contacts/${user.id}`, {
+            await api.delete(`/messages/contacts/${user.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             await refreshContactData(user.id, true);

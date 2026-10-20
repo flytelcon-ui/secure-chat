@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import SiteHeader from '../components/SiteHeader';
+import api from '../utils/api';
 import './AuthPage.css';
 
 function LoginPage() {
@@ -17,7 +17,7 @@ function LoginPage() {
     const handleLogin = async (e) => {
         e.preventDefault();
         try {
-            const res = await axios.post('http://localhost:5000/api/auth/login', { identifier, password });
+            const res = await api.post('/auth/login', { identifier, password });
             
             // Зберігаємо токен і логін, які повернув бекенд
             localStorage.setItem('token', res.data.token);

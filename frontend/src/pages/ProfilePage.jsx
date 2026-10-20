@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import SiteHeader from '../components/SiteHeader';
+import api from '../utils/api';
 import { encryptMessage } from '../utils/ciphers';
 import { getCurrentLocation } from '../utils/location';
 import './AuthPage.css';
@@ -46,7 +46,7 @@ function ProfilePage() {
 
         const loadProfile = async () => {
             try {
-                const response = await axios.get('http://localhost:5000/api/auth/profile', { headers: authHeaders(token) });
+                const response = await api.get('/auth/profile', { headers: authHeaders(token) });
                 setProfile(response.data);
                 setUsername(response.data.username);
                 setAvatar(response.data.avatar);
@@ -130,7 +130,7 @@ function ProfilePage() {
             const encryptedName = isNameEncrypted
                 ? encryptMessage(username.trim(), nameCipherType, nameEncryptionKey)
                 : null;
-            const response = await axios.put('http://localhost:5000/api/auth/profile', {
+            const response = await api.put('/auth/profile', {
                 username: username.trim(),
                 avatar,
                 bio: bio.trim(),
@@ -182,7 +182,7 @@ function ProfilePage() {
 
         setIsSavingPassword(true);
         try {
-            await axios.put('http://localhost:5000/api/auth/password', {
+            await api.put('/auth/password', {
                 currentPassword,
                 newPassword
             }, { headers: authHeaders(token) });
@@ -202,7 +202,7 @@ function ProfilePage() {
         setProfileInviteUrl('');
         setProfileShareStatus('');
         try {
-            const response = await axios.post('http://localhost:5000/api/messages/invites', {}, {
+            const response = await api.post('/messages/invites', {}, {
                 headers: authHeaders(token)
             });
             const inviteUrl = new URL(`/chat?invite=${encodeURIComponent(response.data.token)}`, window.location.origin).toString();

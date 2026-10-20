@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import axios from 'axios';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import SiteHeader from '../components/SiteHeader';
+import api from '../utils/api';
 import './AuthPage.css';
 
 function RegisterPage() {
@@ -20,7 +20,7 @@ function RegisterPage() {
         e.preventDefault();
         try {
             // ДОДАНО ВІДПРАВКУ ПОШТИ
-            await axios.post('http://localhost:5000/api/auth/register', { username, email, password });
+            await api.post('/auth/register', { username, email, password });
             setSuccess(true);
             setError('');
             setTimeout(() => navigate(loginPath), 2000);
