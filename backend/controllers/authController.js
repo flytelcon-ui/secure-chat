@@ -101,12 +101,15 @@ const updateProfile = async (req, res) => {
             return res.status(400).json({ message: 'Аватар має бути PNG, JPEG або WebP розміром до 300 КБ' });
         }
         if (isNameEncrypted && (
-            !['caesar', 'transposition'].includes(nameCipherType) ||
+            !['caesar', 'transposition', 'sdes'].includes(nameCipherType) ||
             typeof encryptedName !== 'string' ||
             encryptedName.length === 0 ||
             encryptedName.length > 128
         )) {
             return res.status(400).json({ message: 'Вкажіть коректне зашифроване ім’я' });
+        }
+        if (isNameEncrypted && nameCipherType === 'sdes' && !/^(?:[\da-f]{2})+$/i.test(encryptedName)) {
+            return res.status(400).json({ message: 'Зашифроване ім’я S-DES має бути коректним Hex-рядком' });
         }
 
         const result = await pool.query(

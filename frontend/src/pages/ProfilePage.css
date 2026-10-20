@@ -271,6 +271,12 @@
   outline: 3px solid rgba(72, 110, 94, 0.13);
 }
 
+.profile-cipher-settings .profile-sdes-key {
+  background: #eef5ff;
+  font-family: "Courier New", monospace;
+  letter-spacing: 2px;
+}
+
 .profile-name-location {
   display: flex;
   flex-direction: column;

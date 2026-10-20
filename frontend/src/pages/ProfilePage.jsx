@@ -17,6 +17,7 @@ function ProfilePage() {
     const [isNameEncrypted, setIsNameEncrypted] = useState(false);
     const [nameCipherType, setNameCipherType] = useState('caesar');
     const [nameCipherKey, setNameCipherKey] = useState('3');
+    const [nameSDESKey, setNameSDESKey] = useState('1010101010');
     const [nameCountry, setNameCountry] = useState('');
     const [nameCity, setNameCity] = useState('');
     const [isNameLocationVerified, setIsNameLocationVerified] = useState(false);
@@ -51,7 +52,7 @@ function ProfilePage() {
                 setAvatar(response.data.avatar);
                 setBio(response.data.bio || '');
                 setIsNameEncrypted(response.data.is_name_encrypted);
-                if (['caesar', 'transposition'].includes(response.data.name_cipher_type)) {
+                if (['caesar', 'transposition', 'sdes'].includes(response.data.name_cipher_type)) {
                     setNameCipherType(response.data.name_cipher_type);
                 }
             } catch (err) {
@@ -116,16 +117,19 @@ function ProfilePage() {
             setProfileError('Визначте поточну геолокацію перед шифруванням імені.');
             return;
         }
+        if (isNameEncrypted && nameCipherType === 'sdes' && !/^[01]{10}$/.test(nameSDESKey)) {
+            setProfileError('Ключ S-DES має містити рівно 10 цифр: 0 або 1.');
+            return;
+        }
         setIsSavingProfile(true);
 
-        const nameEncryptionKey = nameCipherType === 'transposition'
-            ? `${nameCountry}${nameCity}`.toLowerCase().replace(/\s+/g, '')
-            : nameCipherKey;
-        const encryptedName = isNameEncrypted
-            ? encryptMessage(username.trim(), nameCipherType, nameEncryptionKey)
-            : null;
-
         try {
+            const nameEncryptionKey = nameCipherType === 'transposition'
+                ? `${nameCountry}${nameCity}`.toLowerCase().replace(/\s+/g, '')
+                : nameCipherType === 'sdes' ? nameSDESKey : nameCipherKey;
+            const encryptedName = isNameEncrypted
+                ? encryptMessage(username.trim(), nameCipherType, nameEncryptionKey)
+                : null;
             const response = await axios.put('http://localhost:5000/api/auth/profile', {
                 username: username.trim(),
                 avatar,
@@ -316,6 +320,7 @@ function ProfilePage() {
                                         >
                                             <option value="caesar">Шифр Цезаря</option>
                                             <option value="transposition">Шифр перестановки</option>
+                                            <option value="sdes">S-DES (блоковий)</option>
                                         </select>
                                         {nameCipherType === 'caesar' ? (
                                             <>
@@ -328,6 +333,25 @@ function ProfilePage() {
                                                     required
                                                 />
                                                 <p>Зсув не зберігається. Інші користувачі бачитимуть лише шифротекст.</p>
+                                            </>
+                                        ) : nameCipherType === 'sdes' ? (
+                                            <>
+                                                <label htmlFor="profile-name-sdes-key">10-бітний ключ S-DES</label>
+                                                <input
+                                                    id="profile-name-sdes-key"
+                                                    className="profile-sdes-key"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                    spellCheck="false"
+                                                    value={nameSDESKey}
+                                                    onChange={(event) => setNameSDESKey(event.target.value.replace(/[^01]/g, '').slice(0, 10))}
+                                                    maxLength={10}
+                                                    pattern="[01]{10}"
+                                                    placeholder="1010101010"
+                                                    required
+                                                />
+                                                <p>Ім’я буде показане іншим як Hex-шифротекст. Ключ не зберігається у профілі: збережіть його окремо й передайте тим, хто має розшифрувати ім’я.</p>
                                             </>
                                         ) : (
                                             <div className="profile-name-location">

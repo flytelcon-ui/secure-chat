@@ -35,20 +35,31 @@ const cipherDetails = [
         example: 'Одна локація → один ключ',
         color: 'green',
         icon: '↔'
+    },
+    {
+        id: 'sdes',
+        name: 'S-DES (блоковий)',
+        shortName: 'S-DES',
+        description: 'Навчальний блоковий шифр: кожен байт UTF-8 обробляється окремо з 10-бітним ключем, а результат показується у Hex.',
+        how: 'S-DES перетворює 8-бітний блок за допомогою підключів, отриманих із 10-бітного ключа. Тут кожен UTF-8 байт шифрується незалежно.',
+        example: 'D7 → A8 (ключ 1010000010)',
+        color: 'blue',
+        icon: '▦'
     }
 ];
 
 const stepData = [
-    { number: '01', title: 'Ви обираєте тип', text: 'Ви можете використовувати звичайний текст або один з двох шифрів.' },
-    { number: '02', title: 'Визначаєте ключ', text: 'Для Цезаря це числовий зсув, для перестановки — підтверджені геолокацією країна та місто.' },
+    { number: '01', title: 'Ви обираєте тип', text: 'Ви можете використовувати звичайний текст або один із трьох шифрів.' },
+    { number: '02', title: 'Визначаєте ключ', text: 'Для Цезаря це числовий зсув, для перестановки — країна й місто, для S-DES — 10 бітів.' },
     { number: '03', title: 'Текст шифрується', text: 'Відправник кодує повідомлення перед надішиттям.' },
-    { number: '04', title: 'Отримувач розшифровує', text: 'Для перестановки країна й місто мають збігатися з локацією, де текст зашифрували.' }
+    { number: '04', title: 'Отримувач розшифровує', text: 'Потрібен той самий ключ; для шифру перестановки — та сама країна й місто.' }
 ];
 
 function CiphersPage() {
     const [activeCipher, setActiveCipher] = useState('caesar');
     const [sampleText, setSampleText] = useState('Сьогодні перевірю шифр');
     const [keyValue, setKeyValue] = useState('3');
+    const [sdesKeyValue, setSdesKeyValue] = useState('1010101010');
     const [isAnimating, setIsAnimating] = useState(false);
     const [country, setCountry] = useState('');
     const [city, setCity] = useState('');
@@ -58,13 +69,16 @@ function CiphersPage() {
 
     const active = cipherDetails.find(item => item.id === activeCipher) || cipherDetails[0];
     const transpositionKey = `${country}${city}`.toLowerCase().replace(/\s+/g, '');
-    const demoKey = activeCipher === 'transposition' ? transpositionKey : keyValue;
+    const demoKey = activeCipher === 'transposition'
+        ? transpositionKey
+        : activeCipher === 'sdes' ? sdesKeyValue : keyValue;
+    const hasValidSDESKey = /^[01]{10}$/.test(sdesKeyValue);
     const hasTranspositionKey = Boolean(country.trim() && city.trim() && transpositionKey.replace(/[^\p{L}]/gu, ''));
     const encryptedText = useMemo(
-        () => activeCipher === 'transposition' && !isLocationVerified
+        () => (activeCipher === 'transposition' && !isLocationVerified) || (activeCipher === 'sdes' && !hasValidSDESKey)
             ? ''
             : encryptMessage(sampleText, activeCipher, demoKey),
-        [sampleText, activeCipher, demoKey, isLocationVerified]
+        [sampleText, activeCipher, demoKey, isLocationVerified, hasValidSDESKey]
     );
 
     const handleUseMyLocation = async () => {
@@ -165,6 +179,30 @@ function CiphersPage() {
                             </div>
                         )}
 
+                        {activeCipher === 'sdes' && (
+                            <div className="ciphers-key-row ciphers-sdes-key">
+                                <label htmlFor="cipher-sdes-key">Ключ S-DES</label>
+                                <input
+                                    id="cipher-sdes-key"
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    spellCheck="false"
+                                    value={sdesKeyValue}
+                                    onChange={event => setSdesKeyValue(event.target.value.replace(/[^01]/g, '').slice(0, 10))}
+                                    maxLength={10}
+                                    placeholder="1010101010"
+                                    aria-describedby="cipher-sdes-key-hint"
+                                />
+                                <p id="cipher-sdes-key-hint" role={hasValidSDESKey ? undefined : 'status'}>
+                                    {hasValidSDESKey
+                                        ? 'Введіть рівно 10 бітів (0 або 1). S-DES є навчальним шифром.'
+                                        : 'Для результату введіть рівно 10 бітів (0 або 1).'}
+                                </p>
+                                <button type="button" onClick={handleAnimate} disabled={!hasValidSDESKey}>Анімувати</button>
+                            </div>
+                        )}
+
                         {activeCipher === 'transposition' && (
                             <div className="ciphers-transposition-key">
                                 <div className="ciphers-location-fields">
@@ -209,7 +247,13 @@ function CiphersPage() {
 
                         <div className={`ciphers-output ${isAnimating ? 'is-animating' : ''}`}>
                             <span>ШИФРОТЕКСТ</span>
-                            <p>{encryptedText || (activeCipher === 'transposition' && !isLocationVerified ? 'Очікується підтвердження локації' : 'Введіть текст')}</p>
+                            <p>{encryptedText || (
+                                activeCipher === 'transposition' && !isLocationVerified
+                                    ? 'Очікується підтвердження локації'
+                                    : activeCipher === 'sdes' && !hasValidSDESKey
+                                        ? 'Введіть коректний 10-бітний ключ'
+                                        : 'Введіть текст'
+                            )}</p>
                         </div>
                         <div className="ciphers-demo-foot">
                             <span>{active.name}</span>
@@ -221,7 +265,7 @@ function CiphersPage() {
                 <section className="ciphers-methods" id="methods">
                     <div className="ciphers-section-heading">
                         <p className="ciphers-eyebrow"><span /> КОЖДИЙ МЕТОД</p>
-                        <h2>Три способи робити<br />з <span>текстом.</span></h2>
+                        <h2>Чотири способи працювати<br />з <span>текстом.</span></h2>
                     </div>
 
                     <div className="cipher-cards">

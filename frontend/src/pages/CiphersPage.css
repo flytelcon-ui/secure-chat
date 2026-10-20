@@ -287,7 +287,7 @@
 .ciphers-demo-tabs {
   position: relative;
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
   margin-block: 17px 19px;
 }
@@ -361,6 +361,28 @@
 
 .ciphers-caesar-key {
   grid-template-columns: 54px minmax(0, 1fr) auto;
+}
+
+.ciphers-sdes-key {
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+}
+
+.ciphers-sdes-key input {
+  font-family: "Courier New", monospace;
+  letter-spacing: 2px;
+}
+
+.ciphers-sdes-key > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ciphers-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ciphers-sdes-key > button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .ciphers-transposition-key {
@@ -544,7 +566,7 @@
 
 .cipher-cards {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 19px;
   margin-top: 52px;
 }
@@ -840,7 +862,7 @@
   }
 
   .cipher-cards {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .cipher-card {
@@ -883,6 +905,10 @@
     padding: 17px;
   }
 
+  .ciphers-demo-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .ciphers-key-row {
     grid-template-columns: 1fr;
   }
@@ -893,6 +919,18 @@
 
   .ciphers-transposition-key {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ciphers-sdes-key {
+    grid-template-columns: 1fr;
+  }
+
+  .ciphers-sdes-key > p {
+    grid-column: auto;
+  }
+
+  .cipher-cards {
+    grid-template-columns: 1fr;
   }
 
   .ciphers-transposition-key > button {
