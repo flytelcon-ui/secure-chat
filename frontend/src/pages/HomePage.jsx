@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import SiteHeader from '../components/SiteHeader';
 import './HomePage.css';
 
 const slides = [
@@ -72,19 +73,7 @@ function HomePage() {
                 <span className="home-grid-glow" />
             </div>
 
-            <header className="home-header">
-                <Link className="home-brand" to="/" aria-label="SecureChat, головна сторінка">
-                    <span className="home-brand-mark" aria-hidden="true">S</span>
-                    <span>SecureChat</span>
-                </Link>
-                <nav className="home-nav" aria-label="Головна навігація">
-                    <a href="#features">Можливості</a>
-                    <a href="#how-it-works">Як це працює</a>
-                    <Link className="home-nav-ciphers" to="/ciphers">Шифри</Link>
-                    <Link className="home-login" to="/login">Увійти</Link>
-                    <Link className="home-nav-cta" to="/register">Створити акаунт</Link>
-                </nav>
-            </header>
+            <SiteHeader />
 
             <main>
                 <section className="home-hero" aria-labelledby="home-title">

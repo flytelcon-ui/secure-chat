@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import axios from 'axios';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
+import SiteHeader from '../components/SiteHeader';
 import './AuthPage.css';
 
 function RegisterPage() {
@@ -35,13 +36,7 @@ function RegisterPage() {
 
     return (
         <div className="auth-page">
-            <header className="auth-header">
-                <Link className="auth-brand" to="/">
-                    <span className="auth-brand-mark" aria-hidden="true">S</span>
-                    <span>SecureChat</span>
-                </Link>
-                <Link className="auth-home-link" to="/">На головну <span aria-hidden="true">↗</span></Link>
-            </header>
+            <SiteHeader />
 
             <main className="auth-layout auth-layout-register">
                 <section className="auth-story">

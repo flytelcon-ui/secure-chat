@@ -2,6 +2,7 @@
 import axios from 'axios';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { encryptMessage, decryptMessage } from '../utils/ciphers';
+import { getCurrentLocation } from '../utils/location';
 import './ChatPage.css';
 
 function ChatPage() {
@@ -19,9 +20,17 @@ function ChatPage() {
     const [conversationStatus, setConversationStatus] = useState('');
     const [messages, setMessages] = useState([]);
     const [newMessage, setNewMessage] = useState('');
+    const [cipherKeyError, setCipherKeyError] = useState('');
     
     const [cipherType, setCipherType] = useState('none');
     const [cipherKey, setCipherKey] = useState('3');
+    const [country, setCountry] = useState('');
+    const [city, setCity] = useState('');
+    const [isLocating, setIsLocating] = useState(false);
+    const [isLocationVerified, setIsLocationVerified] = useState(false);
+    const [locationError, setLocationError] = useState('');
+    const [revealedProfileName, setRevealedProfileName] = useState('');
+    const [profileNameError, setProfileNameError] = useState('');
     
     const [revealedMessages, setRevealedMessages] = useState({});
     const [editingMsgId, setEditingMsgId] = useState(null);
@@ -159,15 +168,91 @@ function ChatPage() {
         if (!editingMsgId) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, editingMsgId]);
 
+    const transpositionKey = `${country}${city}`.toLowerCase().replace(/\s+/g, '');
+    const hasTranspositionKey = Boolean(country.trim() && city.trim() && transpositionKey.replace(/[^\p{L}]/gu, ''));
+    const hasValidSDESKey = /^[01]{10}$/.test(cipherKey);
+    const keyForCipher = (type) => type === 'transposition' ? transpositionKey : cipherKey;
+    const validateSDESKey = () => {
+        if (cipherType !== 'sdes' || hasValidSDESKey) return true;
+        setCipherKeyError('Введіть ключ S-DES із рівно 10 бітів (0 або 1).');
+        return false;
+    };
+
+    const invalidateLocationAndReveals = () => {
+        setIsLocationVerified(false);
+        setRevealedProfileName('');
+        setRevealedMessages(previous => {
+            const next = { ...previous };
+            messages.forEach(message => {
+                if (message.cipher_type === 'transposition') delete next[message.id];
+            });
+            return next;
+        });
+    };
+
+    const handleUseMyLocation = async () => {
+        if (!navigator.geolocation) {
+            setLocationError('Браузер не підтримує визначення геолокації. Введіть країну та місто вручну.');
+            return;
+        }
+
+
+
+        setIsLocating(true);
+        invalidateLocationAndReveals();
+        setLocationError('');
+        try {
+            const currentLocation = await getCurrentLocation();
+            setCountry(currentLocation.country);
+            setCity(currentLocation.city);
+            setIsLocationVerified(true);
+        } catch (error) {
+            setLocationError(error.code === 1
+                ? 'Надайте браузеру дозвіл на геолокацію або введіть дані вручну.'
+                : 'Не вдалося визначити місто. Введіть країну та місто вручну.');
+        } finally {
+            setIsLocating(false);
+        }
+    };
+
+    const handleRevealProfileName = () => {
+        if (!isLocationVerified) {
+            setCipherType('transposition');
+            setProfileNameError('Спочатку визначте поточну геолокацію.');
+            return;
+        }
+
+        const encryptedName = selectedUser.profile_name || selectedUser.username;
+        const decryptedName = decryptMessage(encryptedName, 'transposition', transpositionKey);
+        if (decryptedName === null) {
+            setRevealedProfileName('');
+            setProfileNameError('Країна або місто не збігається з місцем шифрування.');
+            return;
+        }
+
+        setRevealedProfileName(decryptedName);
+        setProfileNameError('');
+    };
+
     const handleSendMessage = async (e) => {
         e.preventDefault();
         if (!newMessage.trim() || !selectedUser) return;
-        const encryptedText = encryptMessage(newMessage, cipherType, cipherKey);
+        if (!validateSDESKey()) return;
+        if (cipherType === 'transposition' && (!hasTranspositionKey || !isLocationVerified)) {
+            setLocationError('Визначте поточну геолокацію перед використанням шифру перестановки.');
+            return;
+        }
+        const encryptedText = encryptMessage(newMessage, cipherType, keyForCipher(cipherType));
         await sendDataToServer(encryptedText);
     };
 
     const handleFileSelection = (file) => {
         if (!file || !selectedUser) return;
+        if (!validateSDESKey()) return;
+        if (cipherType === 'transposition' && (!hasTranspositionKey || !isLocationVerified)) {
+            setLocationError('Визначте поточну геолокацію перед використанням шифру перестановки.');
+            return;
+        }
         if (!file.type.startsWith('image/')) {
             alert('Можна відправляти лише зображення!');
             return;
@@ -184,6 +269,11 @@ function ChatPage() {
 
     const confirmSendImage = () => {
         if (!pendingImageUrl) return;
+        if (!validateSDESKey()) return;
+        if (cipherType === 'transposition' && (!hasTranspositionKey || !isLocationVerified)) {
+            setLocationError('Визначте поточну геолокацію перед використанням шифру перестановки.');
+            return;
+        }
 
         const img = new Image();
         img.onload = async () => {
@@ -194,7 +284,7 @@ function ChatPage() {
             ctx.drawImage(img, 0, 0, 15, 15);
             const thumbnailBase64 = canvas.toDataURL('image/jpeg', 0.5);
 
-            const encryptedFullImage = encryptMessage(pendingImageUrl, cipherType, cipherKey);
+            const encryptedFullImage = encryptMessage(pendingImageUrl, cipherType, keyForCipher(cipherType));
             const payload = `IMG:::${thumbnailBase64}:::${encryptedFullImage}`;
             
             await sendDataToServer(payload);
@@ -289,6 +379,12 @@ function ChatPage() {
     };
 
     const toggleReveal = (msgId) => {
+        const message = messages.find(item => item.id === msgId);
+        if (!revealedMessages[msgId] && message?.cipher_type === 'transposition' && !isLocationVerified) {
+            setCipherType('transposition');
+            setLocationError('Спочатку визначте поточну геолокацію кнопкою «Моя локація».');
+            return;
+        }
         setRevealedMessages(prev => ({ ...prev, [msgId]: !prev[msgId] }));
     };
 
@@ -409,7 +505,7 @@ function ChatPage() {
         }
     };
 
-    const needsKey = ['caesar', 'transposition'].includes(cipherType);
+    const needsCaesarShift = cipherType === 'caesar';
     const searchQuery = userSearch.trim();
     const currentSearch = userSearchState.query === searchQuery ? userSearchState : null;
     const displayedUsers = activeSidebarTab === 'chats'
@@ -432,7 +528,7 @@ function ChatPage() {
                             <img src={pendingImageUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                         </div>
                         <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
-                            Буде зашифровано як: <strong>{cipherType === 'none' ? 'Без шифру' : (cipherType === 'caesar' ? 'Цезар' : 'Перестановка')}</strong>
+                            Буде зашифровано як: <strong>{cipherType === 'none' ? 'Без шифру' : (cipherType === 'caesar' ? 'Цезар' : cipherType === 'sdes' ? 'S-DES' : 'Перестановка')}</strong>
                         </p>
                         <div className="chat-image-actions" style={{ display: 'flex', gap: '10px' }}>
                             <button onClick={cancelSendImage} style={{ flex: 1, padding: '12px', borderRadius: '25px', border: 'none', backgroundColor: '#f1f1f1', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}>Скасувати</button>
@@ -460,6 +556,25 @@ function ChatPage() {
                                 : selectedUser.username.charAt(0).toUpperCase()}
                         </div>
                         <h2 id="chat-profile-name">{selectedUser.username}</h2>
+                        {selectedUser.is_name_encrypted && selectedUser.name_cipher_type === 'transposition' && (
+                            <div className="chat-profile-encrypted-name">
+                                <span>ЗАШИФРОВАНЕ ІМ’Я</span>
+                                <p>{revealedProfileName || selectedUser.profile_name || selectedUser.username}</p>
+                                <button
+                                    type="button"
+                                    onClick={isLocationVerified ? handleRevealProfileName : () => {
+                                        setCipherType('transposition');
+                                        handleUseMyLocation();
+                                    }}
+                                    disabled={isLocating}
+                                >
+                                    {isLocating
+                                        ? 'Визначаємо локацію…'
+                                        : revealedProfileName ? 'Перевірити знову' : isLocationVerified ? 'Розшифрувати ім’я' : '📍 Моя локація'}
+                                </button>
+                                {profileNameError && <p className="chat-profile-name-error" role="alert">{profileNameError}</p>}
+                            </div>
+                        )}
                         <p className="chat-profile-bio">{selectedUser.bio?.trim() || 'Опис не додано.'}</p>
                     </section>
                 </div>
@@ -623,7 +738,7 @@ function ChatPage() {
                             {isMobile && (
                                 <button className="chat-back-button" onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: '24px', marginRight: '15px', cursor: 'pointer', color: '#007BFF' }}>←</button>
                             )}
-                            <button className="chat-user-profile-trigger" type="button" onClick={() => setIsProfileOpen(true)} aria-label={`Відкрити профіль: ${selectedUser.username}`}>
+                            <button className="chat-user-profile-trigger" type="button" onClick={() => { setRevealedProfileName(''); setProfileNameError(''); setIsProfileOpen(true); }} aria-label={`Відкрити профіль: ${selectedUser.username}`}>
                                 <span className="chat-conversation-avatar">
                                     {selectedUser.avatar ? <img src={selectedUser.avatar} alt="" /> : selectedUser.username.charAt(0).toUpperCase()}
                                 </span>
@@ -673,10 +788,24 @@ function ChatPage() {
                                 }
                                 
                                 let displayText;
-                                if (!isEncrypted || isMine) {
-                                    displayText = decryptMessage(rawPayload, msg.cipher_type, cipherKey);
+                                const shouldDecrypt = !isEncrypted || isMine || revealedMessages[msg.id];
+                                if (msg.cipher_type === 'sdes' && shouldDecrypt && !hasValidSDESKey) {
+                                    displayText = 'Введіть ключ S-DES із рівно 10 бітів (0 або 1).';
+                                } else if (!isEncrypted || isMine || revealedMessages[msg.id]) {
+                                    try {
+                                        displayText = decryptMessage(rawPayload, msg.cipher_type, keyForCipher(msg.cipher_type));
+                                    } catch {
+                                        displayText = msg.cipher_type === 'sdes'
+                                            ? 'Не вдалося розшифрувати S-DES. Перевірте ключ і дані.'
+                                            : 'Не вдалося розшифрувати повідомлення.';
+                                    }
                                 } else {
-                                    displayText = revealedMessages[msg.id] ? decryptMessage(rawPayload, cipherType, cipherKey) : rawPayload;
+                                    displayText = rawPayload;
+                                }
+
+                                const locationKeyMismatch = displayText === null;
+                                if (locationKeyMismatch) {
+                                    displayText = 'Країна або місто не збігається з місцем шифрування.';
                                 }
 
                                 const isSuccessfullyDecryptedImage = isImageMessage && typeof displayText === 'string' && displayText.startsWith('data:image/');
@@ -713,7 +842,13 @@ function ChatPage() {
                                                             </div>
                                                             
                                                             <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', padding: '15px', backgroundColor: 'rgba(255,255,255,0.85)', borderRadius: '15px', textAlign: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' }}>
-                                                                {isMine ? (
+                                                                {locationKeyMismatch ? (
+                                                                    <>
+                                                                        <span style={{ fontSize: '24px' }}>📍</span>
+                                                                        <span style={{ color: '#873d32', fontWeight: 'bold', fontSize: '14px' }}>Інша локація</span>
+                                                                        <span style={{ color: '#666', fontSize: '11px', marginTop: '-5px' }}>Потрібні та сама країна й місто</span>
+                                                                    </>
+                                                                ) : isMine ? (
                                                                     <>
                                                                         <span style={{ fontSize: '24px' }}>🔒</span>
                                                                         <span style={{ color: '#007BFF', fontWeight: 'bold', fontSize: '14px' }}>Зашифровано</span>
@@ -730,7 +865,9 @@ function ChatPage() {
                                                                     ) : (
                                                                         <>
                                                                             <span style={{ fontSize: '28px' }}>🔒</span>
-                                                                            <button onClick={() => toggleReveal(msg.id)} style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', backgroundColor: '#007BFF', color: '#fff', border: 'none', borderRadius: '20px', boxShadow: '0 4px 10px rgba(0,123,255,0.3)' }}>Розшифрувати</button>
+                                                                            <button onClick={() => toggleReveal(msg.id)} style={{ padding: '8px 12px', fontSize: '13px', fontWeight: 'bold', backgroundColor: '#007BFF', color: '#fff', border: 'none', borderRadius: '20px', boxShadow: '0 4px 10px rgba(0,123,255,0.3)' }}>
+                                                                                {msg.cipher_type === 'transposition' && !isLocationVerified ? '📍 Моя локація' : 'Розшифрувати'}
+                                                                            </button>
                                                                         </>
                                                                     )
                                                                 )}
@@ -743,7 +880,9 @@ function ChatPage() {
                                                     <p style={{ margin: '0 0 5px 0', fontSize: '15px', wordWrap: 'break-word', fontFamily: showLongCipher ? 'monospace' : 'inherit' }}>{displayCipherText}</p>
                                                     {!isMine && isEncrypted && (
                                                         <button onClick={() => toggleReveal(msg.id)} style={{ marginTop: '5px', padding: '5px 10px', fontSize: '11px', backgroundColor: revealedMessages[msg.id] ? '#ddd' : '#007BFF', color: revealedMessages[msg.id] ? '#333' : '#fff', border: 'none', borderRadius: '5px' }}>
-                                                            {revealedMessages[msg.id] ? '🔒 Приховати' : '🔓 Розшифрувати'}
+                                                            {revealedMessages[msg.id]
+                                                                ? '🔒 Приховати'
+                                                                : msg.cipher_type === 'transposition' && !isLocationVerified ? '📍 Моя локація' : '🔓 Розшифрувати'}
                                                         </button>
                                                     )}
                                                 </>
@@ -790,30 +929,93 @@ function ChatPage() {
 
                         <div className="chat-composer" style={{ padding: isMobile ? '10px' : '20px', backgroundColor: '#f0f0f0', display: 'flex', alignItems: 'center', zIndex: 5 }}>
                             <form className="chat-composer-form" onSubmit={handleSendMessage} style={{ display: 'flex', gap: '10px', flex: 1, alignItems: 'center', flexWrap: isMobile ? 'wrap' : 'nowrap' }}>
-                                <div style={{ display: 'flex', gap: '10px', width: isMobile ? '100%' : 'auto', flex: isMobile ? 'none' : '0 0 auto' }}>
+                                <div className={`chat-composer-settings ${needsCaesarShift ? 'is-caesar' : ''} ${cipherType === 'transposition' ? 'is-transposition' : ''}`} style={{ width: isMobile ? '100%' : 'min(360px, 40vw)', flex: isMobile ? 'none' : '0 0 min(360px, 40vw)' }}>
                                     <select
                                         className="chat-cipher-select"
                                         value={cipherType} 
-                                        onChange={(e) => setCipherType(e.target.value)} 
+                                        onChange={(e) => {
+                                            const nextCipherType = e.target.value;
+                                            setCipherType(nextCipherType);
+                                            setLocationError('');
+                                            setCipherKeyError('');
+                                            if (nextCipherType === 'sdes' && !hasValidSDESKey) setCipherKey('1010101010');
+                                            if (nextCipherType === 'caesar' && (!/^-?\d+$/.test(cipherKey) || cipherKey.length === 10)) setCipherKey('3');
+                                        }} 
                                         disabled={editingMsgId} 
                                         style={{ flex: 1, padding: '10px 15px', borderRadius: '25px', border: '1px solid #ccc', backgroundColor: editingMsgId ? '#e0e0e0' : '#fff', color: '#333', outline: 'none', fontWeight: 'bold' }}
                                     >
                                         <option value="none">Без шифру</option>
                                         <option value="caesar">Шифр Цезаря</option>
                                         <option value="transposition">Шифр перестановки</option>
+                                        <option value="sdes">S-DES (Блочний)</option>
                                     </select>
 
-                                    {needsKey && (
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', flex: 1 }}>
-                                            <span style={{ fontSize: '14px', color: '#555', fontWeight: 'bold' }}>{cipherType === 'transposition' ? 'Пароль:' : 'Зсув:'}</span>
-                                            <input 
-                                                type={cipherType === 'caesar' ? 'number' : 'text'} 
-                                                value={cipherKey} 
-                                                onChange={(e) => setCipherKey(e.target.value)} 
-                                                placeholder={cipherType === 'transposition' ? 'Слово' : '3'}
+                                    {needsCaesarShift && (
+                                        <label className="chat-cipher-shift">
+                                            <span>Зсув</span>
+                                            <input
+                                                type="number"
+                                                value={cipherKey}
+                                                onChange={(event) => setCipherKey(event.target.value)}
+                                                placeholder="3"
                                                 disabled={editingMsgId}
-                                                style={{ width: '100%', minWidth: '60px', padding: '10px', borderRadius: '25px', border: '1px solid #ccc', backgroundColor: editingMsgId ? '#e0e0e0' : '#fff', color: '#333', outline: 'none', fontSize: '14px', textAlign: 'center' }}
                                             />
+                                        </label>
+                                    )}
+                                    {cipherType === 'sdes' && (
+                                        <label className="chat-cipher-shift">
+                                            <span>10-бітний ключ</span>
+                                            <input
+                                                type="text"
+                                                inputMode="numeric"
+                                                value={cipherKey}
+                                                onChange={(event) => {
+                                                    setCipherKey(event.target.value.replace(/[^01]/g, '').slice(0, 10));
+                                                    setCipherKeyError('');
+                                                }}
+                                                maxLength="10"
+                                                placeholder="1010101010"
+                                                disabled={editingMsgId}
+                                                style={{ fontFamily: 'monospace', letterSpacing: '2px', backgroundColor: '#e8f1ff', border: '1px solid #9bbcf2', borderRadius: '6px', padding: '9px' }}
+                                                aria-invalid={Boolean(cipherKeyError)}
+                                                aria-describedby={cipherKeyError ? 'sdes-key-error' : undefined}
+                                            />
+                                            {cipherKeyError && <span id="sdes-key-error" className="chat-location-error" role="alert">{cipherKeyError}</span>}
+                                        </label>
+                                    )}
+                                    {cipherType === 'transposition' && (
+                                        <div className="chat-transposition-key">
+                                            <div className="chat-transposition-fields">
+                                                <label>
+                                                    Країна
+                                                    <input
+                                                        type="text"
+                                                        value={country}
+                                                        onChange={(event) => { setCountry(event.target.value); invalidateLocationAndReveals(); setLocationError(''); }}
+                                                        placeholder="Україна"
+                                                        disabled={editingMsgId || isLocating}
+                                                    />
+                                                </label>
+                                                <label>
+                                                    Місто
+                                                    <input
+                                                        type="text"
+                                                        value={city}
+                                                        onChange={(event) => { setCity(event.target.value); invalidateLocationAndReveals(); setLocationError(''); }}
+                                                        placeholder="Київ"
+                                                        disabled={editingMsgId || isLocating}
+                                                    />
+                                                </label>
+                                            </div>
+                                            <button
+                                                className="chat-location-button"
+                                                type="button"
+                                                onClick={handleUseMyLocation}
+                                                disabled={editingMsgId || isLocating}
+                                            >
+                                                {isLocating ? 'Визначаємо локацію…' : '📍 Моя локація'}
+                                            </button>
+                                            {locationError && <p className="chat-location-error" role="alert">{locationError}</p>}
                                         </div>
                                     )}
                                 </div>

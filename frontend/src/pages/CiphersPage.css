@@ -359,6 +359,96 @@
   margin-top: 12px;
 }
 
+.ciphers-caesar-key {
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+}
+
+.ciphers-transposition-key {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.ciphers-location-fields {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.ciphers-location-fields label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #596762;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.ciphers-location-fields input {
+  min-height: 39px;
+  min-width: 0;
+  padding: 0 9px;
+  box-sizing: border-box;
+  font-size: 11px;
+}
+
+.ciphers-transposition-key > button {
+  min-height: 39px;
+  padding: 0 10px;
+  color: var(--ciphers-green);
+  background: #e8eee9;
+  border: 1px solid rgba(72, 110, 94, 0.2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ciphers-transposition-key > button:hover:not(:disabled) {
+  color: white;
+  background: var(--ciphers-green);
+}
+
+.ciphers-transposition-key > button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.ciphers-transposition-key > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--ciphers-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.ciphers-transposition-key > p[role="alert"] {
+  color: #873d32;
+}
+
+.ciphers-no-key-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.ciphers-no-key-actions button {
+  min-height: 39px;
+  padding: 0 14px;
+  color: white;
+  background: var(--ciphers-ink);
+  border: 0;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
 .ciphers-key-row input {
   min-height: 39px;
   padding: 0 11px;
@@ -795,6 +885,18 @@
 
   .ciphers-key-row {
     grid-template-columns: 1fr;
+  }
+
+  .ciphers-caesar-key {
+    grid-template-columns: 50px minmax(0, 1fr);
+  }
+
+  .ciphers-transposition-key {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ciphers-transposition-key > button {
+    width: 100%;
   }
 
   .ciphers-key-row button {

@@ -271,10 +271,97 @@
   outline: 3px solid rgba(72, 110, 94, 0.13);
 }
 
+.profile-name-location {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.profile-name-location-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-name-location-fields label {
+  min-width: 0;
+}
+
+.profile-name-location-fields input {
+  margin: 7px 0 0;
+}
+
+.profile-name-location-button {
+  min-height: 41px;
+  color: var(--auth-green);
+  background: #e6efe7;
+  border: 1px solid rgba(72, 110, 94, 0.2);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-name-location-button:hover:not(:disabled) {
+  color: white;
+  background: var(--auth-green);
+}
+
+.profile-name-location-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.profile-name-location-error {
+  color: #873d32 !important;
+}
+
 .profile-cipher-settings p {
   color: #52667a;
   font-size: 10px;
   line-height: 1.5;
+}
+
+.profile-name-location-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-name-location-fields input {
+  min-width: 0;
+  margin: 7px 0 0;
+  padding-inline: 10px;
+}
+
+.profile-name-location-button {
+  width: 100%;
+  min-height: 41px;
+  margin-bottom: 4px;
+  color: var(--auth-green);
+  background: #e6efe7;
+  border: 1px solid rgba(72, 110, 94, 0.2);
+  border-radius: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.profile-name-location-button:hover:not(:disabled) {
+  color: white;
+  background: var(--auth-green);
+}
+
+.profile-name-location-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.profile-name-location-error {
+  color: #873d32 !important;
 }
 
 .profile-divider {

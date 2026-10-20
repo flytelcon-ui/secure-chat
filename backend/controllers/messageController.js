@@ -20,6 +20,7 @@ const getUsers = async (req, res) => {
                     u.avatar,
                     u.bio,
                     u.is_name_encrypted,
+                    u.name_cipher_type,
                                         (
                                                 SELECT COUNT(*)::INTEGER FROM messages unread_message
                                                 WHERE unread_message.sender_id = u.id
@@ -78,6 +79,7 @@ const getUserProfileById = async (req, res) => {
                     u.avatar,
                     u.bio,
                     u.is_name_encrypted,
+                    u.name_cipher_type,
                     (c.contact_id IS NOT NULL) AS is_contact,
                     EXISTS (
                         SELECT 1 FROM messages m
@@ -172,6 +174,7 @@ const redeemChatInvite = async (req, res) => {
                     u.avatar,
                     u.bio,
                     u.is_name_encrypted,
+                    u.name_cipher_type,
                     (c.contact_id IS NOT NULL) AS is_contact,
                     EXISTS (
                         SELECT 1 FROM messages m
@@ -220,6 +223,7 @@ const searchUsers = async (req, res) => {
                     u.avatar,
                     u.bio,
                     u.is_name_encrypted,
+                    u.name_cipher_type,
                                         (
                                                 SELECT COUNT(*)::INTEGER FROM messages unread_message
                                                 WHERE unread_message.sender_id = u.id
@@ -266,7 +270,12 @@ const addContact = async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO contacts (user_id, contact_id, custom_name)
-             SELECT $1, id, COALESCE(NULLIF($3, ''), username) FROM users WHERE id = $2
+             SELECT $1, id,
+                    COALESCE(NULLIF($3, ''), CASE WHEN is_name_encrypted
+                        THEN COALESCE(NULLIF(encrypted_name, ''), 'Зашифроване ім’я')
+                        ELSE username
+                    END)
+             FROM users WHERE id = $2
              ON CONFLICT (user_id, contact_id)
              DO UPDATE SET custom_name = EXCLUDED.custom_name
              RETURNING contact_id, custom_name`,

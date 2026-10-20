@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import axios from 'axios';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
+import SiteHeader from '../components/SiteHeader';
 import { encryptMessage } from '../utils/ciphers';
+import { getCurrentLocation } from '../utils/location';
 import './AuthPage.css';
 import './ProfilePage.css';
 
@@ -15,6 +17,11 @@ function ProfilePage() {
     const [isNameEncrypted, setIsNameEncrypted] = useState(false);
     const [nameCipherType, setNameCipherType] = useState('caesar');
     const [nameCipherKey, setNameCipherKey] = useState('3');
+    const [nameCountry, setNameCountry] = useState('');
+    const [nameCity, setNameCity] = useState('');
+    const [isNameLocationVerified, setIsNameLocationVerified] = useState(false);
+    const [isLocatingName, setIsLocatingName] = useState(false);
+    const [nameLocationError, setNameLocationError] = useState('');
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -105,10 +112,17 @@ function ProfilePage() {
         event.preventDefault();
         setProfileError('');
         setProfileSuccess('');
+        if (isNameEncrypted && nameCipherType === 'transposition' && !isNameLocationVerified) {
+            setProfileError('Визначте поточну геолокацію перед шифруванням імені.');
+            return;
+        }
         setIsSavingProfile(true);
 
+        const nameEncryptionKey = nameCipherType === 'transposition'
+            ? `${nameCountry}${nameCity}`.toLowerCase().replace(/\s+/g, '')
+            : nameCipherKey;
         const encryptedName = isNameEncrypted
-            ? encryptMessage(username.trim(), nameCipherType, nameCipherKey)
+            ? encryptMessage(username.trim(), nameCipherType, nameEncryptionKey)
             : null;
 
         try {
@@ -130,6 +144,26 @@ function ProfilePage() {
             setProfileError(err.response?.data?.message || 'Не вдалося зберегти профіль');
         } finally {
             setIsSavingProfile(false);
+        }
+    };
+
+    const handleNameLocation = async () => {
+        setIsLocatingName(true);
+        setIsNameLocationVerified(false);
+        setNameLocationError('');
+        try {
+            const currentLocation = await getCurrentLocation();
+            setNameCountry(currentLocation.country);
+            setNameCity(currentLocation.city);
+            setIsNameLocationVerified(true);
+        } catch (error) {
+            setNameLocationError(error.code === 1
+                ? 'Надайте браузеру дозвіл на геолокацію.'
+                : error.code === 'UNSUPPORTED'
+                    ? 'Браузер не підтримує геолокацію.'
+                    : 'Не вдалося визначити країну й місто.');
+        } finally {
+            setIsLocatingName(false);
         }
     };
 
@@ -193,13 +227,7 @@ function ProfilePage() {
 
     return (
         <div className="auth-page profile-page">
-            <header className="auth-header">
-                <Link className="auth-brand" to="/">
-                    <span className="auth-brand-mark" aria-hidden="true">S</span>
-                    <span>SecureChat</span>
-                </Link>
-                <Link className="auth-home-link" to="/chat">← До чату</Link>
-            </header>
+            <SiteHeader />
 
             <main className="profile-layout">
                 <section className="auth-form-panel profile-panel" aria-labelledby="profile-title">
@@ -277,24 +305,83 @@ function ProfilePage() {
                                 {isNameEncrypted && (
                                     <div className="profile-cipher-settings">
                                         <label htmlFor="profile-name-cipher">Метод шифрування</label>
-                                        <select id="profile-name-cipher" value={nameCipherType} onChange={(event) => setNameCipherType(event.target.value)}>
+                                        <select
+                                            id="profile-name-cipher"
+                                            value={nameCipherType}
+                                            onChange={(event) => {
+                                                setNameCipherType(event.target.value);
+                                                setIsNameLocationVerified(false);
+                                                setNameLocationError('');
+                                            }}
+                                        >
                                             <option value="caesar">Шифр Цезаря</option>
                                             <option value="transposition">Шифр перестановки</option>
                                         </select>
-                                        <label htmlFor="profile-name-key">Ключ</label>
-                                        <input
-                                            id="profile-name-key"
-                                            type={nameCipherType === 'caesar' ? 'number' : 'text'}
-                                            value={nameCipherKey}
-                                            onChange={(event) => setNameCipherKey(event.target.value)}
-                                            required
-                                        />
-                                        <p>Ключ не зберігається. Інші користувачі бачитимуть лише шифротекст.</p>
+                                        {nameCipherType === 'caesar' ? (
+                                            <>
+                                                <label htmlFor="profile-name-key">Зсув</label>
+                                                <input
+                                                    id="profile-name-key"
+                                                    type="number"
+                                                    value={nameCipherKey}
+                                                    onChange={(event) => setNameCipherKey(event.target.value)}
+                                                    required
+                                                />
+                                                <p>Зсув не зберігається. Інші користувачі бачитимуть лише шифротекст.</p>
+                                            </>
+                                        ) : (
+                                            <div className="profile-name-location">
+                                                <div className="profile-name-location-fields">
+                                                    <label htmlFor="profile-name-country">
+                                                        Країна
+                                                        <input
+                                                            id="profile-name-country"
+                                                            type="text"
+                                                            value={nameCountry}
+                                                            onChange={(event) => {
+                                                                setNameCountry(event.target.value);
+                                                                setIsNameLocationVerified(false);
+                                                                setNameLocationError('');
+                                                            }}
+                                                            maxLength={40}
+                                                            placeholder="Україна"
+                                                            disabled={isLocatingName || isSavingProfile}
+                                                        />
+                                                    </label>
+                                                    <label htmlFor="profile-name-city">
+                                                        Місто
+                                                        <input
+                                                            id="profile-name-city"
+                                                            type="text"
+                                                            value={nameCity}
+                                                            onChange={(event) => {
+                                                                setNameCity(event.target.value);
+                                                                setIsNameLocationVerified(false);
+                                                                setNameLocationError('');
+                                                            }}
+                                                            maxLength={40}
+                                                            placeholder="Київ"
+                                                            disabled={isLocatingName || isSavingProfile}
+                                                        />
+                                                    </label>
+                                                </div>
+                                                <button
+                                                    className="profile-name-location-button"
+                                                    type="button"
+                                                    onClick={handleNameLocation}
+                                                    disabled={isLocatingName || isSavingProfile}
+                                                >
+                                                    {isLocatingName ? 'Визначаємо локацію…' : '📍 Моя локація'}
+                                                </button>
+                                                {nameLocationError && <p className="profile-name-location-error" role="alert">{nameLocationError}</p>}
+                                                <p>Ім’я зможуть розшифрувати лише користувачі з тією самою країною та містом.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {profileSuccess && <div className="auth-alert auth-alert-success" role="status">{profileSuccess}</div>}
-                                <button className="auth-submit" type="submit" disabled={isSavingProfile}>
+                                <button className="auth-submit" type="submit" disabled={isSavingProfile || isLocatingName}>
                                     {isSavingProfile ? 'Збереження...' : 'Зберегти профіль'} <span aria-hidden="true">↗</span>
                                 </button>
                             </form>

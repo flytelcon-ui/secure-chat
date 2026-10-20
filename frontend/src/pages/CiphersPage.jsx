@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import SiteHeader from '../components/SiteHeader';
 import { encryptMessage } from '../utils/ciphers';
+import { getCurrentLocation } from '../utils/location';
 import './CiphersPage.css';
 
 const cipherDetails = [
@@ -28,9 +30,9 @@ const cipherDetails = [
         id: 'transposition',
         name: 'Шифр перестановки',
         shortName: 'Перестановка',
-        description: 'Текст записується у таблицю, а потім читається за стовпцями в ключовому порядку.',
-        how: 'Ключ формує кількість стовпців і порядок їх читання. Слова можуть змінитися, але не втрати їх більше.',
-        example: 'ПРИВІТ → ПВІРТ',
+        description: 'Текст перемішується за ключем із поточної країни та міста.',
+        how: 'Для відновлення тексту потрібен той самий ключ країни й міста, визначений геолокацією.',
+        example: 'Одна локація → один ключ',
         color: 'green',
         icon: '↔'
     }
@@ -38,9 +40,9 @@ const cipherDetails = [
 
 const stepData = [
     { number: '01', title: 'Ви обираєте тип', text: 'Ви можете використовувати звичайний текст або один з двох шифрів.' },
-    { number: '02', title: 'Вказуєте ключ', text: 'Для Цезаря це зсув, для перестановки — слово або фраза.' },
+    { number: '02', title: 'Визначаєте ключ', text: 'Для Цезаря це числовий зсув, для перестановки — підтверджені геолокацією країна та місто.' },
     { number: '03', title: 'Текст шифрується', text: 'Відправник кодує повідомлення перед надішиттям.' },
-    { number: '04', title: 'Получувач розшарфує', text: 'Відправлене повідомлення можна розшифрувати тільки за ключем.' }
+    { number: '04', title: 'Отримувач розшифровує', text: 'Для перестановки країна й місто мають збігатися з локацією, де текст зашифрували.' }
 ];
 
 function CiphersPage() {
@@ -48,12 +50,42 @@ function CiphersPage() {
     const [sampleText, setSampleText] = useState('Сьогодні перевірю шифр');
     const [keyValue, setKeyValue] = useState('3');
     const [isAnimating, setIsAnimating] = useState(false);
+    const [country, setCountry] = useState('');
+    const [city, setCity] = useState('');
+    const [isLocationVerified, setIsLocationVerified] = useState(false);
+    const [isLocating, setIsLocating] = useState(false);
+    const [locationError, setLocationError] = useState('');
 
     const active = cipherDetails.find(item => item.id === activeCipher) || cipherDetails[0];
+    const transpositionKey = `${country}${city}`.toLowerCase().replace(/\s+/g, '');
+    const demoKey = activeCipher === 'transposition' ? transpositionKey : keyValue;
+    const hasTranspositionKey = Boolean(country.trim() && city.trim() && transpositionKey.replace(/[^\p{L}]/gu, ''));
     const encryptedText = useMemo(
-        () => encryptMessage(sampleText, activeCipher, keyValue),
-        [sampleText, activeCipher, keyValue]
+        () => activeCipher === 'transposition' && !isLocationVerified
+            ? ''
+            : encryptMessage(sampleText, activeCipher, demoKey),
+        [sampleText, activeCipher, demoKey, isLocationVerified]
     );
+
+    const handleUseMyLocation = async () => {
+        setIsLocating(true);
+        setIsLocationVerified(false);
+        setLocationError('');
+        try {
+            const currentLocation = await getCurrentLocation();
+            setCountry(currentLocation.country);
+            setCity(currentLocation.city);
+            setIsLocationVerified(true);
+        } catch (error) {
+            setLocationError(error.code === 1
+                ? 'Надайте браузеру дозвіл на геолокацію.'
+                : error.code === 'UNSUPPORTED'
+                    ? 'Браузер не підтримує геолокацію.'
+                    : 'Не вдалося визначити країну й місто.');
+        } finally {
+            setIsLocating(false);
+        }
+    };
 
     const handleAnimate = () => {
         setIsAnimating(true);
@@ -73,17 +105,7 @@ function CiphersPage() {
                 <span className="ciphers-orb ciphers-orb-three" />
             </div>
 
-            <header className="ciphers-header">
-                <Link className="ciphers-brand" to="/">
-                    <span aria-hidden="true">S</span>
-                    SecureChat
-                </Link>
-                <nav aria-label="Навігація по шифрам">
-                    <a href="#methods" onClick={event => scrollToSection(event, 'methods')}>Методи</a>
-                    <a href="#how" onClick={event => scrollToSection(event, 'how')}>Як це працює</a>
-                    <Link to="/register">Створити акаунт</Link>
-                </nav>
-            </header>
+            <SiteHeader />
 
             <main>
                 <section className="ciphers-hero">
@@ -97,7 +119,7 @@ function CiphersPage() {
                         </div>
                         <div className="ciphers-safety-note">
                             <span>!</span>
-                            <p><strong>Важливо:</strong> Ці шифри — навчальні. Для чутливних даних не варто використовувати їх як заміну сучасного шифрування.</p>
+                            <p><strong>Важливо:</strong> Шифри навчальні, а браузерну геолокацію можна підмінити. Не використовуйте їх для захисту чутливих даних.</p>
                         </div>
                     </div>
 
@@ -129,22 +151,65 @@ function CiphersPage() {
                             placeholder="Введіть текст для шифрування"
                         />
 
-                        <div className="ciphers-key-row">
-                            <label htmlFor="cipher-key">Ключ</label>
-                            <input
-                                id="cipher-key"
-                                type={activeCipher === 'caesar' ? 'number' : 'text'}
-                                value={keyValue}
-                                onChange={event => setKeyValue(event.target.value)}
-                                disabled={activeCipher === 'none'}
-                                placeholder={activeCipher === 'caesar' ? 'Зсув' : 'Слово'}
-                            />
-                            <button type="button" onClick={handleAnimate}>Анімувати</button>
-                        </div>
+                        {activeCipher === 'caesar' && (
+                            <div className="ciphers-key-row ciphers-caesar-key">
+                                <label htmlFor="cipher-key">Зсув</label>
+                                <input
+                                    id="cipher-key"
+                                    type="number"
+                                    value={keyValue}
+                                    onChange={event => setKeyValue(event.target.value)}
+                                    placeholder="3"
+                                />
+                                <button type="button" onClick={handleAnimate}>Анімувати</button>
+                            </div>
+                        )}
+
+                        {activeCipher === 'transposition' && (
+                            <div className="ciphers-transposition-key">
+                                <div className="ciphers-location-fields">
+                                    <label htmlFor="cipher-country">
+                                        Країна
+                                        <input
+                                            id="cipher-country"
+                                            type="text"
+                                            value={country}
+                                            onChange={event => { setCountry(event.target.value); setIsLocationVerified(false); setLocationError(''); }}
+                                            maxLength={40}
+                                            placeholder="Україна"
+                                            disabled={isLocating}
+                                        />
+                                    </label>
+                                    <label htmlFor="cipher-city">
+                                        Місто
+                                        <input
+                                            id="cipher-city"
+                                            type="text"
+                                            value={city}
+                                            onChange={event => { setCity(event.target.value); setIsLocationVerified(false); setLocationError(''); }}
+                                            maxLength={40}
+                                            placeholder="Київ"
+                                            disabled={isLocating}
+                                        />
+                                    </label>
+                                </div>
+                                <button type="button" onClick={handleUseMyLocation} disabled={isLocating}>
+                                    {isLocating ? 'Визначаємо локацію…' : '📍 Моя локація'}
+                                </button>
+                                {locationError && <p role="alert">{locationError}</p>}
+                                {!isLocationVerified && !locationError && <p>Спершу підтвердіть геолокацію, щоб побачити результат.</p>}
+                                {isLocationVerified && hasTranspositionKey && <button type="button" onClick={handleAnimate}>Анімувати</button>}
+                            </div>
+                        )}
+                        {activeCipher === 'none' && (
+                            <div className="ciphers-no-key-actions">
+                                <button type="button" onClick={handleAnimate}>Анімувати</button>
+                            </div>
+                        )}
 
                         <div className={`ciphers-output ${isAnimating ? 'is-animating' : ''}`}>
                             <span>ШИФРОТЕКСТ</span>
-                            <p>{encryptedText || 'Введіть текст'}</p>
+                            <p>{encryptedText || (activeCipher === 'transposition' && !isLocationVerified ? 'Очікується підтвердження локації' : 'Введіть текст')}</p>
                         </div>
                         <div className="ciphers-demo-foot">
                             <span>{active.name}</span>
