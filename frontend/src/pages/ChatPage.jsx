@@ -737,7 +737,15 @@ function ChatPage() {
                     <>
                         <div className="chat-conversation-header" style={{ padding: '15px 20px', backgroundColor: '#ffffff', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center', boxShadow: '0 1px 3px rgba(0,0,0,0.05)', zIndex: 5 }}>
                             {isMobile && (
-                                <button className="chat-back-button" onClick={() => setSelectedUser(null)} style={{ background: 'none', border: 'none', fontSize: '24px', marginRight: '15px', cursor: 'pointer', color: '#007BFF' }}>←</button>
+                                <button
+                                    className="chat-back-button"
+                                    type="button"
+                                    onClick={() => setSelectedUser(null)}
+                                    aria-label="Повернутися до списку чатів"
+                                    title="Список чатів"
+                                >
+                                    <span aria-hidden="true">☰</span>
+                                </button>
                             )}
                             <button className="chat-user-profile-trigger" type="button" onClick={() => { setRevealedProfileName(''); setProfileNameError(''); setIsProfileOpen(true); }} aria-label={`Відкрити профіль: ${selectedUser.username}`}>
                                 <span className="chat-conversation-avatar">

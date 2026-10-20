@@ -7,7 +7,7 @@
   --chat-green: #486e5e;
   --chat-yellow: #e0b952;
   height: 100dvh !important;
-  min-height: 520px;
+  min-height: 100dvh;
   color: var(--chat-ink) !important;
   background-color: var(--chat-paper) !important;
   background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(33, 51, 46, 0.025) 40px) !important;
@@ -17,6 +17,8 @@
 .chat-sidebar {
   width: min(340px, 34vw) !important;
   flex: 0 0 min(340px, 34vw);
+  min-width: 0;
+  min-height: 0;
   background: var(--chat-paper) !important;
   border-right: 1px solid rgba(33, 51, 46, 0.18) !important;
 }
@@ -78,6 +80,7 @@
 }
 
 .chat-sidebar-content {
+  min-height: 0;
   padding: 17px 12px !important;
   background: var(--chat-paper);
 }
@@ -311,6 +314,9 @@
 }
 
 .chat-main {
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
   min-width: 0;
   background-color: #e8e5d8 !important;
   background-image: repeating-linear-gradient(135deg, transparent, transparent 18px, rgba(33, 51, 46, 0.022) 19px, rgba(33, 51, 46, 0.022) 20px) !important;
@@ -634,13 +640,21 @@
 .chat-back-button {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
-  margin-right: 10px !important;
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  margin: 0 4px 0 0 !important;
   color: var(--chat-ink) !important;
-  border: 1px solid #bfdbfe !important;
-  border-radius: 50%;
-  font-size: 18px !important;
+  background: #e6efe7 !important;
+  border: 1px solid rgba(72, 110, 94, 0.2) !important;
+  border-radius: 4px !important;
+  font-size: 17px !important;
+  cursor: pointer;
+}
+
+.chat-back-button:hover {
+  color: white !important;
+  background: var(--chat-green) !important;
 }
 
 .chat-conversation-messages {
@@ -948,32 +962,72 @@
 }
 
 @media (max-width: 768px) {
+  .chat-page {
+    height: 100dvh !important;
+    min-height: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
   .chat-sidebar {
     width: 100% !important;
     flex-basis: 100%;
+    min-height: 0;
     border-right: 0 !important;
   }
 
   .chat-sidebar-header {
     min-height: 72px;
-    padding: 13px 15px !important;
+    flex: 0 0 auto;
+    gap: 10px;
+    padding: 12px 15px !important;
+  }
+
+  .chat-sidebar-header > div:first-child {
+    min-width: 0;
+  }
+
+  .chat-sidebar-header > div:first-child > div {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .chat-sidebar-header > div:last-child {
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .chat-sidebar-content {
+    min-height: 0;
     padding: 12px !important;
+  }
+
+  .chat-main {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
   }
 
   .chat-conversation-header {
     min-height: 66px;
-    padding: 10px 8px !important;
+    flex: 0 0 auto;
+    gap: 8px;
+    padding: 8px 10px !important;
+  }
+
+  .chat-back-button {
+    margin-right: 0 !important;
   }
 
   .chat-user-profile-trigger {
+    min-width: 0;
     gap: 8px;
   }
 
   .chat-user-profile-copy strong {
-    max-width: 28vw;
+    max-width: min(42vw, 220px);
     font-size: 15px;
   }
 
@@ -984,6 +1038,7 @@
   }
 
   .chat-conversation-messages {
+    min-height: 0;
     padding: 16px 12px !important;
     gap: 10px !important;
   }
@@ -997,7 +1052,8 @@
   }
 
   .chat-composer {
-    padding: 9px !important;
+    flex: 0 0 auto;
+    padding: 9px 9px calc(9px + env(safe-area-inset-bottom)) !important;
   }
 
   .chat-composer-form {
@@ -1034,7 +1090,11 @@
 
 @media (max-width: 390px) {
   .chat-sidebar-header {
-    padding-inline: 10px !important;
+    padding-inline: 8px !important;
+  }
+
+  .chat-sidebar-header > div:first-child > div {
+    max-width: 27vw;
   }
 
   .chat-home-button,
@@ -1052,5 +1112,36 @@
 
   .chat-composer-form > div:nth-child(2) {
     gap: 6px !important;
+  }
+
+  .chat-conversation-header {
+    gap: 6px;
+    padding-inline: 7px !important;
+  }
+
+  .chat-back-button {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  .chat-conversation-avatar {
+    width: 38px !important;
+    height: 38px !important;
+    flex-basis: 38px;
+  }
+
+  .chat-user-profile-copy strong {
+    max-width: 32vw;
+    font-size: 13px;
+  }
+
+  .chat-delete-conversation-button {
+    max-width: 74px;
+    white-space: normal;
+  }
+
+  .chat-message-bubble {
+    max-width: 94% !important;
   }
 }
