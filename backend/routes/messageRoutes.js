@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers, getUserProfileById, createChatInvite, redeemChatInvite, searchUsers, addContact, updateContact, deleteContact, sendMessage, getMessages, deleteConversation, editMessage, deleteMessage, pingStatus, setTyping } = require('../controllers/messageController');
+const { getUsers, getUserProfileById, createChatInvite, redeemChatInvite, searchUsers, addContact, updateContact, deleteContact, sendMessage, getMessages, deleteConversation, deleteDHConversation, acceptDHInvite, editMessage, deleteMessage, pingStatus, setTyping } = require('../controllers/messageController');
 const authMiddleware = require('../middleware/authMiddleware');
 
 router.get('/users', authMiddleware, getUsers);
@@ -13,6 +13,8 @@ router.put('/contacts/:contactId', authMiddleware, updateContact);
 router.delete('/contacts/:contactId', authMiddleware, deleteContact);
 router.post('/send', authMiddleware, sendMessage);
 router.delete('/conversation/:userId', authMiddleware, deleteConversation);
+router.delete('/dh/:userId', authMiddleware, deleteDHConversation);
+router.delete('/dh/:userId/invite', authMiddleware, acceptDHInvite);
 router.get('/:chatWithUserId', authMiddleware, getMessages);
 
 // Нові маршрути для сучасних фіч

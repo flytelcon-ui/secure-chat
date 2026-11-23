@@ -56,7 +56,7 @@ const login = async (req, res) => {
         // Генеруємо JWT токен для доступу до чату
         const token = jwt.sign({ userId: user.rows[0].id }, process.env.JWT_SECRET, { expiresIn: '24h' });
 
-        res.json({ message: 'Вхід успішний!', token, username: user.rows[0].username });
+        res.json({ message: 'Вхід успішний!', token, username: user.rows[0].username, userId: user.rows[0].id });
     } catch (err) {
         console.error(err.message);
         res.status(500).json({ message: 'Помилка сервера' });
@@ -66,7 +66,7 @@ const login = async (req, res) => {
 const getProfile = async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT id, username, email, avatar, bio, is_name_encrypted, encrypted_name, name_cipher_type
+            `SELECT id, username, email, avatar, bio, is_name_encrypted, encrypted_name, name_cipher_type, public_key
              FROM users WHERE id = $1`,
             [req.user.userId]
         );
@@ -156,4 +156,22 @@ const changePassword = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile, updateProfile, changePassword };
+const setPublicKey = async (req, res) => {
+    const publicKey = typeof req.body.publicKey === 'string' ? req.body.publicKey.trim() : '';
+    if (!/^\d+$/.test(publicKey) || BigInt(publicKey) < 1n || BigInt(publicKey) >= 101n) {
+        return res.status(400).json({ message: 'Некоректний відкритий D-H ключ' });
+    }
+
+    try {
+        const result = await pool.query(
+            'UPDATE users SET public_key = $1 WHERE id = $2 RETURNING public_key',
+            [publicKey, req.user.userId]
+        );
+        if (!result.rows.length) return res.status(404).json({ message: 'Користувача не знайдено' });
+        res.json({ publicKey: result.rows[0].public_key });
+    } catch (err) {
+        res.status(500).json({ message: 'Не вдалося зберегти відкритий D-H ключ' });
+    }
+};
+
+module.exports = { register, login, getProfile, updateProfile, changePassword, setPublicKey };

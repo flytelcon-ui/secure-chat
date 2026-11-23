@@ -1,9 +1,16 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import api from '../utils/api';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { encryptMessage, decryptMessage } from '../utils/ciphers';
 import { getCurrentLocation } from '../utils/location';
+import {
+    computePublicKey,
+    computeSharedSecret,
+    generateEmojiFingerprint,
+    deriveSDESKey,
+    deriveCaesarShift
+} from '../utils/diffieHellman';
 import './ChatPage.css';
 
 function ChatPage() {
@@ -44,43 +51,88 @@ function ChatPage() {
     
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
+    const [dhPrivateKey, setDhPrivateKey] = useState(null);
+    const [dhPeerPublicKey, setDhPeerPublicKey] = useState(null);
+    const [dhSharedSecret, setDhSharedSecret] = useState(null);
+    const [dhEmojis, setDhEmojis] = useState([]);
+    const [dhPrivateInput, setDhPrivateInput] = useState('');
+    const [dhSetupError, setDhSetupError] = useState('');
+    const [dismissedDHInvites, setDismissedDHInvites] = useState(() => {
+        try {
+            const saved = JSON.parse(localStorage.getItem('dh_dismissed_invites') || '[]');
+            return new Set(Array.isArray(saved) ? saved.map(String) : []);
+        } catch {
+            return new Set();
+        }
+    });
+    const [useDHKey, setUseDHKey] = useState(false);
+    const [isDhModalOpen, setIsDhModalOpen] = useState(false);
     const location = useLocation();
     const navigate = useNavigate();
     const requestedUserId = new URLSearchParams(location.search).get('user');
     const requestedInviteToken = new URLSearchParams(location.search).get('invite');
     const myUsername = localStorage.getItem('username');
     const token = localStorage.getItem('token');
+    let currentUserId = Number(localStorage.getItem('userId')) || null;
+    if (!currentUserId && token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
+            currentUserId = Number(payload.userId);
+        } catch {
+            currentUserId = null;
+        }
+    }
     const sharedUserRequestKey = requestedInviteToken
         ? `invite:${requestedInviteToken}`
         : requestedUserId ? `user:${requestedUserId}` : '';
     const isLoadingSharedUser = Boolean(token && sharedUserRequestKey && sharedUserResult.requestKey !== sharedUserRequestKey);
     const sharedUserError = sharedUserResult.requestKey === sharedUserRequestKey ? sharedUserResult.error : '';
 
-    useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth <= 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     useEffect(() => {
-        if (!isProfileOpen && !contactDialog) return;
-        const handleKeyDown = (event) => {
-            if (event.key === 'Escape') {
-                setIsProfileOpen(false);
-                setContactDialog(null);
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown);
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isProfileOpen, contactDialog]);
+        if (!selectedUser || !dhPrivateKey) {
+            setDhSharedSecret(null);
+            setDhEmojis([]);
+            setUseDHKey(false);
+            return;
+        }
+
+        const peerInvite = messages.find(message =>
+            String(message.sender_id) === String(selectedUser.id) &&
+            message.encrypted_text?.startsWith('DHINVITE:')
+        );
+        const peerPublicKey = dhPeerPublicKey
+            || peerInvite?.encrypted_text.slice('DHINVITE:'.length)
+            || selectedUser.public_key;
+        if (!peerPublicKey) {
+            setDhSharedSecret(null);
+            setDhEmojis([]);
+            setUseDHKey(false);
+            return;
+        }
+        const secret = computeSharedSecret(peerPublicKey, dhPrivateKey);
+        setDhSharedSecret(secret);
+        setDhEmojis(generateEmojiFingerprint(secret));
+    }, [selectedUser, dhPrivateKey, dhPeerPublicKey, messages]);
+
+    useEffect(() => setUseDHKey(false), [selectedUser?.id]);
+
+    useEffect(() => {
+        setDhPrivateKey(null);
+        setDhPeerPublicKey(null);
+        setDhSharedSecret(null);
+        setDhEmojis([]);
+        setDhPrivateInput('');
+        setDhSetupError('');
+        setCipherType(current => current === 'dh' ? 'none' : current);
+    }, [selectedUser?.id]);
 
     useEffect(() => {
         if (!token) {
-            const returnPath = `${location.pathname}${location.search}`;
-            navigate(`/login?next=${encodeURIComponent(returnPath)}`, { replace: true });
+            const returnPath = location.pathname + location.search;
+            navigate('/login?next=' + encodeURIComponent(returnPath), { replace: true });
         }
     }, [location.pathname, location.search, navigate, token]);
-
     useEffect(() => {
         if (!token || (!requestedInviteToken && !requestedUserId)) return;
 
@@ -90,11 +142,11 @@ function ChatPage() {
             : `user:${requestedUserId}`;
         const request = requestedInviteToken
             ? api.post('/messages/invites/redeem', { token: requestedInviteToken }, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { Authorization: 'Bearer ' + token },
                 signal: controller.signal
             })
             : api.get(`/messages/users/${encodeURIComponent(requestedUserId)}/profile`, {
-                headers: { Authorization: `Bearer ${token}` },
+                headers: { Authorization: 'Bearer ' + token },
                 signal: controller.signal
             });
 
@@ -118,15 +170,20 @@ function ChatPage() {
     useEffect(() => {
         const fetchAll = async () => {
             if (!token) return;
-            api.post('/messages/ping', {}, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+            api.post('/messages/ping', {}, { headers: { Authorization: 'Bearer ' + token } }).catch(()=>{});
             try {
                 if (selectedUser) {
-                    const msgRes = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    const msgRes = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: 'Bearer ' + token } });
                     setMessages(prev => JSON.stringify(prev) !== JSON.stringify(msgRes.data) ? msgRes.data : prev);
                 }
 
-                const usersRes = await api.get('/messages/users', { headers: { Authorization: `Bearer ${token}` } });
+                const usersRes = await api.get('/messages/users', { headers: { Authorization: 'Bearer ' + token } });
                 setUsers(prev => JSON.stringify(prev) !== JSON.stringify(usersRes.data) ? usersRes.data : prev);
+                setSelectedUser(current => {
+                    if (!current) return current;
+                    const refreshed = usersRes.data.find(user => user.id === current.id);
+                    return refreshed ? { ...current, ...refreshed } : current;
+                });
             } catch (err) {
                 console.error(err);
             }
@@ -147,7 +204,7 @@ function ChatPage() {
             try {
                 const response = await api.get('/messages/users/search', {
                     params: { q: query },
-                    headers: { Authorization: `Bearer ${token}` },
+                    headers: { Authorization: 'Bearer ' + token },
                     signal: controller.signal
                 });
                 setUserSearchState({ query, status: 'success', users: response.data });
@@ -172,11 +229,122 @@ function ChatPage() {
     const transpositionKey = `${country}${city}`.toLowerCase().replace(/\s+/g, '');
     const hasTranspositionKey = Boolean(country.trim() && city.trim() && transpositionKey.replace(/[^\p{L}]/gu, ''));
     const hasValidSDESKey = /^[01]{10}$/.test(cipherKey);
-    const keyForCipher = (type) => type === 'transposition' ? transpositionKey : cipherKey;
+    const keyForCipher = (type) => {
+        if (type === 'transposition') return transpositionKey;
+        if (type === 'dh' && dhSharedSecret) return String(deriveCaesarShift(dhSharedSecret));
+        if (useDHKey && dhSharedSecret) {
+            if (type === 'sdes') return deriveSDESKey(dhSharedSecret);
+            if (type === 'caesar') return String(deriveCaesarShift(dhSharedSecret));
+        }
+        return cipherKey;
+    };
     const validateSDESKey = () => {
-        if (cipherType !== 'sdes' || hasValidSDESKey) return true;
+        if (cipherType !== 'sdes') return true;
+        if (useDHKey && dhSharedSecret) return true;
+        if (hasValidSDESKey) return true;
         setCipherKeyError('Введіть ключ S-DES із рівно 10 бітів (0 або 1).');
         return false;
+    };
+
+    const handleDHPrivateSubmit = async (event) => {
+        event?.preventDefault();
+        const privateKey = dhPrivateInput.trim();
+        if (!/^\d{3}$/.test(privateKey)) {
+            setDhSetupError('Введіть рівно 3 цифри.');
+            return;
+        }
+
+        const publicKey = computePublicKey(privateKey);
+        setDhPrivateKey(privateKey);
+        setDhPrivateInput(privateKey);
+        setDhSetupError('');
+
+        try {
+            if (selectedUser) {
+                await api.post('/messages/send', {
+                    receiverId: selectedUser.id,
+                    encryptedText: `DHINVITE:${publicKey}`,
+                    cipherType: 'dh'
+                }, { headers: { Authorization: 'Bearer ' + token } });
+                const response = await api.get(`/messages/${selectedUser.id}`, {
+                    headers: { Authorization: 'Bearer ' + token }
+                });
+                setMessages(response.data);
+            }
+            setIsDhModalOpen(false);
+        } catch (error) {
+            setDhSetupError(error.response?.data?.message || 'Не вдалося надіслати DH-запит. Перевірте підключення до сервера.');
+        }
+    };
+
+    const handleAcceptDHInvite = async (invite) => {
+        const peerPublicKey = invite.encrypted_text.slice('DHINVITE:'.length);
+        if (!/^\d+$/.test(peerPublicKey)) {
+            setConversationStatus('DH-запит має некоректний відкритий ключ.');
+            return;
+        }
+
+        const nextDismissedInvites = new Set(dismissedDHInvites);
+        nextDismissedInvites.add(String(invite.id));
+        const savedDismissedInvites = [...nextDismissedInvites].slice(-100);
+        localStorage.setItem('dh_dismissed_invites', JSON.stringify(savedDismissedInvites));
+        setDismissedDHInvites(new Set(savedDismissedInvites));
+        setMessages(current => current.filter(message => String(message.id) !== String(invite.id)));
+        setDhPrivateKey(null);
+        setDhPeerPublicKey(peerPublicKey);
+        setDhSharedSecret(null);
+        setDhEmojis([]);
+        setDhPrivateInput('');
+        setDhSetupError('');
+        setCipherType('dh');
+        setIsDhModalOpen(true);
+
+        try {
+            await api.delete(`/messages/dh/${selectedUser.id}/invite`, {
+                headers: { Authorization: 'Bearer ' + token }
+            });
+        } catch (error) {
+            console.error('Не вдалося видалити прийняте DH-запрошення на сервері:', error);
+        }
+    };
+
+    const handleCipherTypeChange = async (event) => {
+        const nextCipherType = event.target.value;
+        const shouldClearDH = cipherType === 'dh' && nextCipherType !== 'dh' && selectedUser;
+
+        setCipherType(nextCipherType);
+        setLocationError('');
+        setCipherKeyError('');
+        if (nextCipherType === 'sdes' && !hasValidSDESKey) setCipherKey('1010101010');
+        if (nextCipherType === 'caesar' && (!/^-?\d+$/.test(cipherKey) || cipherKey.length === 10)) setCipherKey('3');
+
+        if (nextCipherType === 'dh') {
+            setDhPrivateKey(null);
+            setDhPeerPublicKey(null);
+            setDhSharedSecret(null);
+            setDhEmojis([]);
+            setDhPrivateInput('');
+            setDhSetupError('');
+            setIsDhModalOpen(true);
+        }
+
+        if (shouldClearDH) {
+            try {
+                await api.delete(`/messages/dh/${selectedUser.id}`, {
+                    headers: { Authorization: 'Bearer ' + token }
+                });
+                const response = await api.get(`/messages/${selectedUser.id}`, {
+                    headers: { Authorization: 'Bearer ' + token }
+                });
+                setMessages(response.data);
+                setDhPrivateKey(null);
+                setDhPeerPublicKey(null);
+                setDhSharedSecret(null);
+                setDhEmojis([]);
+            } catch (error) {
+                setConversationStatus(error.response?.data?.message || 'Не вдалося видалити DH-повідомлення.');
+            }
+        }
     };
 
     const invalidateLocationAndReveals = () => {
@@ -243,7 +411,18 @@ function ChatPage() {
             setLocationError('Визначте поточну геолокацію перед використанням шифру перестановки.');
             return;
         }
-        const encryptedText = encryptMessage(newMessage, cipherType, keyForCipher(cipherType));
+        if (cipherType === 'dh' && !dhSharedSecret) {
+            setDhSetupError('Спочатку введіть трицифрове число і дочекайтесь ключа співрозмовника.');
+            setIsDhModalOpen(true);
+            return;
+        }
+        let encryptedText = cipherType === 'dh'
+            ? encryptMessage(newMessage, 'caesar', keyForCipher('dh'))
+            : encryptMessage(newMessage, cipherType, keyForCipher(cipherType));
+        if (cipherType === 'dh') encryptedText = `DHMSG1:${encryptedText}`;
+        if (useDHKey && dhSharedSecret && (cipherType === 'caesar' || cipherType === 'sdes')) {
+            encryptedText = `DHKEY1:${cipherType}:${encryptedText}`;
+        }
         await sendDataToServer(encryptedText);
     };
 
@@ -285,10 +464,21 @@ function ChatPage() {
             ctx.drawImage(img, 0, 0, 15, 15);
             const thumbnailBase64 = canvas.toDataURL('image/jpeg', 0.5);
 
-            const encryptedFullImage = encryptMessage(pendingImageUrl, cipherType, keyForCipher(cipherType));
+            if (cipherType === 'dh' && !dhSharedSecret) {
+                setDhSetupError('Спочатку встановіть спільний DH-ключ.');
+                setIsDhModalOpen(true);
+                return;
+            }
+            let encryptedFullImage = cipherType === 'dh'
+                ? encryptMessage(pendingImageUrl, 'caesar', keyForCipher('dh'))
+                : encryptMessage(pendingImageUrl, cipherType, keyForCipher(cipherType));
+            if (cipherType === 'dh') encryptedFullImage = `DHMSG1:${encryptedFullImage}`;
+            if (useDHKey && dhSharedSecret && (cipherType === 'caesar' || cipherType === 'sdes')) {
+                encryptedFullImage = `DHKEY1:${cipherType}:${encryptedFullImage}`;
+            }
             const payload = `IMG:::${thumbnailBase64}:::${encryptedFullImage}`;
             
-            await sendDataToServer(payload);
+            await sendDataToServer(payload, cipherType);
             cancelSendImage(); 
         };
         img.src = pendingImageUrl;
@@ -299,21 +489,22 @@ function ChatPage() {
         if (fileInputRef.current) fileInputRef.current.value = null;
     };
 
-    const sendDataToServer = async (encryptedText) => {
+    const sendDataToServer = async (encryptedText, cipherTypeOverride = null) => {
+        const sentCipherType = cipherTypeOverride || cipherType;
         try {
             if (editingMsgId) {
                 await api.put(`/messages/${editingMsgId}`, 
-                    { encryptedText, cipherType },
-                    { headers: { Authorization: `Bearer ${token}` } }
+                    { encryptedText, cipherType: sentCipherType },
+                    { headers: { Authorization: 'Bearer ' + token } }
                 );
                 setEditingMsgId(null);
             } else {
                 await api.post('/messages/send', 
-                    { receiverId: selectedUser.id, encryptedText, cipherType },
-                    { headers: { Authorization: `Bearer ${token}` } }
+                    { receiverId: selectedUser.id, encryptedText, cipherType: sentCipherType },
+                    { headers: { Authorization: 'Bearer ' + token } }
                 );
             }
-            const res = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: `Bearer ${token}` } });
+            const res = await api.get(`/messages/${selectedUser.id}`, { headers: { Authorization: 'Bearer ' + token } });
             setMessages(res.data);
             setNewMessage('');
         } catch (err) {
@@ -326,7 +517,7 @@ function ChatPage() {
     const handleDelete = async (msgId) => {
         if (!window.confirm('Ви впевнені, що хочете видалити повідомлення?')) return;
         try {
-            await api.delete(`/messages/${msgId}`, { headers: { Authorization: `Bearer ${token}` } });
+            await api.delete(`/messages/${msgId}`, { headers: { Authorization: 'Bearer ' + token } });
             setMessages(messages.filter(m => m.id !== msgId));
         } catch (err) {
             console.error("Помилка видалення", err);
@@ -344,13 +535,13 @@ function ChatPage() {
         const userId = selectedUser.id;
         try {
             await api.delete(`/messages/conversation/${userId}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: 'Bearer ' + token }
             });
             setMessages([]);
             setSelectedUser(null);
             setConversationStatus('Переписку видалено. Контакт залишився у списку.');
             const usersResponse = await api.get('/messages/users', {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: 'Bearer ' + token }
             });
             setUsers(usersResponse.data);
             setUserSearchState(current => ({
@@ -375,7 +566,7 @@ function ChatPage() {
     const handleTyping = (e) => {
         setNewMessage(e.target.value);
         if (selectedUser) {
-            api.post('/messages/typing', { receiverId: selectedUser.id }, { headers: { Authorization: `Bearer ${token}` } }).catch(()=>{});
+            api.post('/messages/typing', { receiverId: selectedUser.id }, { headers: { Authorization: 'Bearer ' + token } }).catch(()=>{});
         }
     };
 
@@ -395,7 +586,7 @@ function ChatPage() {
     };
 
     const refreshContactData = async (userId, wasDeleted = false) => {
-        const headers = { Authorization: `Bearer ${token}` };
+        const headers = { Authorization: 'Bearer ' + token };
         const query = userSearch.trim();
         const [usersResponse, searchResponse] = await Promise.all([
             api.get('/messages/users', { headers }),
@@ -441,7 +632,7 @@ function ChatPage() {
         setContactError('');
         try {
             const { user } = contactDialog;
-            const headers = { Authorization: `Bearer ${token}` };
+            const headers = { Authorization: 'Bearer ' + token };
             if (user.is_contact) {
                 await api.put(`/messages/contacts/${user.id}`, { customName }, { headers });
             } else {
@@ -462,7 +653,7 @@ function ChatPage() {
 
         try {
             await api.delete(`/messages/contacts/${user.id}`, {
-                headers: { Authorization: `Bearer ${token}` }
+                headers: { Authorization: 'Bearer ' + token }
             });
             await refreshContactData(user.id, true);
             setContactStatus('Контакт видалено. Історію чату збережено.');
@@ -515,6 +706,15 @@ function ChatPage() {
     const isUserSearchLoading = activeSidebarTab === 'chats' && Boolean(searchQuery) && (!currentSearch || currentSearch.status === 'loading');
     const showSidebar = !isMobile || !selectedUser;
     const showChat = !isMobile || selectedUser;
+    const incomingDHInvite = selectedUser
+        ? messages.find(message =>
+            String(message.sender_id) === String(selectedUser.id) &&
+            String(message.sender_id) !== String(currentUserId) &&
+            message.cipher_type === 'dh' &&
+            !dismissedDHInvites.has(String(message.id)) &&
+            message.encrypted_text?.startsWith('DHINVITE:')
+        )
+        : null;
 
     return (
         <div className="chat-page" style={{ display: 'flex', height: '100vh', fontFamily: '"Segoe UI", Roboto, Helvetica, Arial, sans-serif', backgroundColor: '#f0f2f5', overflow: 'hidden' }}>
@@ -529,7 +729,7 @@ function ChatPage() {
                             <img src={pendingImageUrl} alt="Preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                         </div>
                         <p style={{ fontSize: '14px', color: '#666', marginBottom: '20px' }}>
-                            Буде зашифровано як: <strong>{cipherType === 'none' ? 'Без шифру' : (cipherType === 'caesar' ? 'Цезар' : cipherType === 'sdes' ? 'S-DES' : 'Перестановка')}</strong>
+                            Буде зашифровано як: <strong>{cipherType === 'none' ? 'Без шифру' : cipherType === 'caesar' ? 'Цезар' : cipherType === 'sdes' ? 'S-DES' : cipherType === 'dh' ? 'Діффі–Хеллман' : 'Перестановка'}</strong>
                         </p>
                         <div className="chat-image-actions" style={{ display: 'flex', gap: '10px' }}>
                             <button onClick={cancelSendImage} style={{ flex: 1, padding: '12px', borderRadius: '25px', border: 'none', backgroundColor: '#f1f1f1', color: '#333', fontWeight: 'bold', cursor: 'pointer' }}>Скасувати</button>
@@ -538,6 +738,47 @@ function ChatPage() {
                             </button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {isDhModalOpen && selectedUser && (
+                <div className="chat-profile-overlay" onClick={() => setIsDhModalOpen(false)}>
+                    <section className="chat-profile-dialog chat-dh-dialog" role="dialog" aria-modal="true" aria-labelledby="dh-title" onClick={event => event.stopPropagation()}>
+                        <button className="chat-profile-close" type="button" aria-label="Закрити" onClick={() => setIsDhModalOpen(false)}>×</button>
+                        <p className="chat-contact-dialog-kicker">ОКРЕМИЙ DH-ЧАТ</p>
+                        <h2 id="dh-title">Діффі–Хеллман</h2>
+                        {dhSharedSecret ? (
+                            <>
+                                <div className="chat-dh-emojis">{dhEmojis.join(' ')}</div>
+                                <p>Спільний ключ готовий. Можете користуватися окремою зашифрованою перепискою.</p>
+                            </>
+                        ) : dhPrivateKey ? (
+                            <div className="chat-dh-waiting-state">
+                                <span>🔑</span>
+                                <p>Ключ надіслано. Очікуємо трицифрове число співрозмовника.</p>
+                            </div>
+                        ) : (
+                            <form className="chat-dh-key-form" onSubmit={handleDHPrivateSubmit}>
+                                <label htmlFor="dh-private-key">Ваше трицифрове секретне число</label>
+                                <input
+                                    id="dh-private-key"
+                                    type="text"
+                                    inputMode="numeric"
+                                    autoComplete="off"
+                                    maxLength="3"
+                                    value={dhPrivateInput}
+                                    onChange={event => {
+                                        setDhPrivateInput(event.target.value.replace(/\D/g, '').slice(0, 3));
+                                        setDhSetupError('');
+                                    }}
+                                    placeholder="Наприклад: 321"
+                                    autoFocus
+                                />
+                                {dhSetupError && <p className="chat-location-error" role="alert">{dhSetupError}</p>}
+                                <button type="submit">Створити та надіслати запит</button>
+                            </form>
+                        )}
+                    </section>
                 </div>
             )}
 
@@ -756,6 +997,15 @@ function ChatPage() {
                                     {selectedUser.isOnline ? <small>В мережі</small> : <small>Не в мережі</small>}
                                 </span>
                             </button>
+                            {dhSharedSecret ? (
+                                <button type="button" className="chat-dh-badge" onClick={() => setIsDhModalOpen(true)} title="Перевірка DH-ключа">
+                                    <span>🔒</span> {dhEmojis.join(' ')}
+                                </button>
+                            ) : (
+                                <button type="button" className="chat-dh-badge is-waiting" onClick={() => setIsDhModalOpen(true)}>
+                                    <span>🔑</span> Очікування DH-ключа
+                                </button>
+                            )}
                             {messages.length > 0 && (
                                 <button
                                     className="chat-delete-conversation-button"
@@ -770,10 +1020,25 @@ function ChatPage() {
                         </div>
                         
                         <div className="chat-conversation-messages" style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '15px' : '30px 40px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                            {messages.map(msg => {
+                            {cipherType !== 'dh' && incomingDHInvite && (
+                                <section className="chat-dh-invite-card" role="status">
+                                    <span className="chat-dh-invite-icon" aria-hidden="true">🔐</span>
+                                    <div className="chat-dh-invite-copy">
+                                        <strong>Запрошення до зашифрованого чату</strong>
+                                        <p><b>{selectedUser.username}</b> пропонує перейти на протокол «Діффі–Хеллман».</p>
+                                    </div>
+                                    <button type="button" onClick={() => handleAcceptDHInvite(incomingDHInvite)}>
+                                        Перейти до DH-чату
+                                    </button>
+                                </section>
+                            )}
+                            {(cipherType === 'dh'
+                                ? messages.filter(msg => !msg.encrypted_text.startsWith('DHINVITE:') && (msg.cipher_type === 'dh' || msg.encrypted_text.startsWith('DHMSG1:')))
+                                : messages.filter(msg => msg.cipher_type !== 'dh' && !msg.encrypted_text.startsWith('DHMSG1:') && !msg.encrypted_text.startsWith('DHINVITE:'))
+                            ).map(msg => {
                                 const isMine = msg.sender_id !== selectedUser.id;
                                 const isEncrypted = msg.cipher_type !== 'none';
-                                
+
                                 let isImageMessage = false;
                                 let rawPayload = msg.encrypted_text;
                                 let thumbnail = null;
@@ -797,12 +1062,41 @@ function ChatPage() {
                                 }
                                 
                                 let displayText;
-                                const shouldDecrypt = !isEncrypted || isMine || revealedMessages[msg.id];
-                                if (msg.cipher_type === 'sdes' && shouldDecrypt && !hasValidSDESKey) {
+                                let payloadToDecrypt = rawPayload;
+                                let isDHWrapped = false;
+                                let isDHInvite = false;
+                                let decryptionKey = keyForCipher(msg.cipher_type);
+                                if (typeof payloadToDecrypt === 'string' && payloadToDecrypt.startsWith('DHMSG1:')) {
+                                    isDHWrapped = true;
+                                    payloadToDecrypt = payloadToDecrypt.slice('DHMSG1:'.length);
+                                    decryptionKey = dhSharedSecret ? String(deriveCaesarShift(dhSharedSecret)) : decryptionKey;
+                                } else if (typeof payloadToDecrypt === 'string' && payloadToDecrypt.startsWith('DHINVITE:')) {
+                                    isDHInvite = true;
+                                    displayText = '🔐 Співрозмовник пропонує зашифрований DH-чат.';
+                                } else if (typeof payloadToDecrypt === 'string' && payloadToDecrypt.startsWith('DHKEY1:')) {
+                                    isDHWrapped = true;
+                                    const [, dhCipherType, ...payloadParts] = payloadToDecrypt.split(':');
+                                    payloadToDecrypt = payloadParts.join(':');
+                                    if (dhSharedSecret) {
+                                        decryptionKey = dhCipherType === 'sdes'
+                                            ? deriveSDESKey(dhSharedSecret)
+                                            : dhCipherType === 'caesar'
+                                                ? String(deriveCaesarShift(dhSharedSecret))
+                                                : decryptionKey;
+                                    }
+                                }
+                                const shouldDecrypt = !isEncrypted || isMine || revealedMessages[msg.id] || isDHWrapped;
+                                if (isDHInvite) {
+                                    displayText = '🔐 Співрозмовник пропонує зашифрований DH-чат.';
+                                } else if (isDHWrapped && !dhSharedSecret) {
+                                    displayText = 'Очікування спільного DH-ключа.';
+                                } else if (msg.cipher_type === 'sdes' && shouldDecrypt && !hasValidSDESKey && !isDHWrapped) {
                                     displayText = 'Введіть ключ S-DES із рівно 10 бітів (0 або 1).';
-                                } else if (!isEncrypted || isMine || revealedMessages[msg.id]) {
+                                } else if (!isEncrypted || isMine || revealedMessages[msg.id] || isDHWrapped) {
                                     try {
-                                        displayText = decryptMessage(rawPayload, msg.cipher_type, keyForCipher(msg.cipher_type));
+                                        displayText = isDHWrapped
+                                            ? decryptMessage(payloadToDecrypt, 'caesar', decryptionKey)
+                                            : decryptMessage(payloadToDecrypt, msg.cipher_type, decryptionKey);
                                     } catch {
                                         displayText = msg.cipher_type === 'sdes'
                                             ? 'Не вдалося розшифрувати S-DES. Перевірте ключ і дані.'
@@ -887,7 +1181,12 @@ function ChatPage() {
                                             ) : (
                                                 <>
                                                     <p style={{ margin: '0 0 5px 0', fontSize: '15px', wordWrap: 'break-word', fontFamily: showLongCipher ? 'monospace' : 'inherit' }}>{displayCipherText}</p>
-                                                    {!isMine && isEncrypted && (
+                                                    {isDHInvite && !dhPrivateKey && (
+                                                        <button type="button" onClick={() => { setCipherType('dh'); setIsDhModalOpen(true); }} style={{ marginTop: '7px', padding: '7px 12px', border: 'none', borderRadius: '20px', background: '#486e5e', color: '#fff', cursor: 'pointer', fontWeight: 'bold' }}>
+                                                            Ввести 3-значне число
+                                                        </button>
+                                                    )}
+                                                    {!isMine && isEncrypted && !isDHWrapped && (
                                                         <button onClick={() => toggleReveal(msg.id)} style={{ marginTop: '5px', padding: '5px 10px', fontSize: '11px', backgroundColor: revealedMessages[msg.id] ? '#ddd' : '#007BFF', color: revealedMessages[msg.id] ? '#333' : '#fff', border: 'none', borderRadius: '5px' }}>
                                                             {revealedMessages[msg.id]
                                                                 ? '🔒 Приховати'
@@ -942,14 +1241,7 @@ function ChatPage() {
                                     <select
                                         className="chat-cipher-select"
                                         value={cipherType} 
-                                        onChange={(e) => {
-                                            const nextCipherType = e.target.value;
-                                            setCipherType(nextCipherType);
-                                            setLocationError('');
-                                            setCipherKeyError('');
-                                            if (nextCipherType === 'sdes' && !hasValidSDESKey) setCipherKey('1010101010');
-                                            if (nextCipherType === 'caesar' && (!/^-?\d+$/.test(cipherKey) || cipherKey.length === 10)) setCipherKey('3');
-                                        }} 
+                                        onChange={handleCipherTypeChange}
                                         disabled={editingMsgId} 
                                         style={{ flex: 1, padding: '10px 15px', borderRadius: '25px', border: '1px solid #ccc', backgroundColor: editingMsgId ? '#e0e0e0' : '#fff', color: '#333', outline: 'none', fontWeight: 'bold' }}
                                     >
@@ -957,6 +1249,7 @@ function ChatPage() {
                                         <option value="caesar">Шифр Цезаря</option>
                                         <option value="transposition">Шифр перестановки</option>
                                         <option value="sdes">S-DES (Блочний)</option>
+                                        <option value="dh">Діффі–Хеллман</option>
                                     </select>
 
                                     {needsCaesarShift && (
@@ -964,10 +1257,10 @@ function ChatPage() {
                                             <span>Зсув</span>
                                             <input
                                                 type="number"
-                                                value={cipherKey}
+                                                value={useDHKey && dhSharedSecret ? deriveCaesarShift(dhSharedSecret) : cipherKey}
                                                 onChange={(event) => setCipherKey(event.target.value)}
                                                 placeholder="3"
-                                                disabled={editingMsgId}
+                                                disabled={editingMsgId || (useDHKey && Boolean(dhSharedSecret))}
                                             />
                                         </label>
                                     )}
@@ -977,14 +1270,14 @@ function ChatPage() {
                                             <input
                                                 type="text"
                                                 inputMode="numeric"
-                                                value={cipherKey}
+                                                value={useDHKey && dhSharedSecret ? deriveSDESKey(dhSharedSecret) : cipherKey}
                                                 onChange={(event) => {
                                                     setCipherKey(event.target.value.replace(/[^01]/g, '').slice(0, 10));
                                                     setCipherKeyError('');
                                                 }}
                                                 maxLength="10"
                                                 placeholder="1010101010"
-                                                disabled={editingMsgId}
+                                                disabled={editingMsgId || (useDHKey && Boolean(dhSharedSecret))}
                                                 style={{ fontFamily: 'monospace', letterSpacing: '2px', backgroundColor: '#e8f1ff', border: '1px solid #9bbcf2', borderRadius: '6px', padding: '9px' }}
                                                 aria-invalid={Boolean(cipherKeyError)}
                                                 aria-describedby={cipherKeyError ? 'sdes-key-error' : undefined}

@@ -21,6 +21,7 @@ const getUsers = async (req, res) => {
                     u.bio,
                     u.is_name_encrypted,
                     u.name_cipher_type,
+                    u.public_key,
                                         (
                                                 SELECT COUNT(*)::INTEGER FROM messages unread_message
                                                 WHERE unread_message.sender_id = u.id
@@ -80,6 +81,7 @@ const getUserProfileById = async (req, res) => {
                     u.bio,
                     u.is_name_encrypted,
                     u.name_cipher_type,
+                    u.public_key,
                     (c.contact_id IS NOT NULL) AS is_contact,
                     EXISTS (
                         SELECT 1 FROM messages m
@@ -175,6 +177,7 @@ const redeemChatInvite = async (req, res) => {
                     u.bio,
                     u.is_name_encrypted,
                     u.name_cipher_type,
+                    u.public_key,
                     (c.contact_id IS NOT NULL) AS is_contact,
                     EXISTS (
                         SELECT 1 FROM messages m
@@ -224,6 +227,7 @@ const searchUsers = async (req, res) => {
                     u.bio,
                     u.is_name_encrypted,
                     u.name_cipher_type,
+                    u.public_key,
                                         (
                                                 SELECT COUNT(*)::INTEGER FROM messages unread_message
                                                 WHERE unread_message.sender_id = u.id
@@ -383,6 +387,50 @@ const deleteConversation = async (req, res) => {
     }
 };
 
+const deleteDHConversation = async (req, res) => {
+    const otherUserId = Number(req.params.userId);
+    if (!Number.isSafeInteger(otherUserId) || otherUserId <= 0 || otherUserId === req.user.userId) {
+        return res.status(400).json({ message: 'Оберіть коректного співрозмовника' });
+    }
+
+    try {
+        const result = await pool.query(
+            `DELETE FROM messages
+             WHERE ((sender_id = $1 AND receiver_id = $2)
+                 OR (sender_id = $2 AND receiver_id = $1))
+               AND (cipher_type = 'dh'
+                 OR encrypted_text LIKE 'DHMSG1:%'
+                 OR encrypted_text LIKE 'DHINVITE:%'
+                 OR encrypted_text LIKE 'DHKEY1:%')`,
+            [req.user.userId, otherUserId]
+        );
+        res.json({ success: true, deletedCount: result.rowCount });
+    } catch (err) {
+        res.status(500).json({ message: 'Не вдалося очистити DH-переписку' });
+    }
+};
+
+const acceptDHInvite = async (req, res) => {
+    const otherUserId = Number(req.params.userId);
+    if (!Number.isSafeInteger(otherUserId) || otherUserId <= 0 || otherUserId === req.user.userId) {
+        return res.status(400).json({ message: 'Оберіть коректного співрозмовника' });
+    }
+
+    try {
+        const result = await pool.query(
+            `DELETE FROM messages
+             WHERE sender_id = $1 AND receiver_id = $2
+               AND cipher_type = 'dh'
+               AND encrypted_text LIKE 'DHINVITE:%'`,
+            [otherUserId, req.user.userId]
+        );
+        if (!result.rowCount) return res.status(404).json({ message: 'Запрошення вже неактивне' });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ message: 'Не вдалося прийняти DH-запрошення' });
+    }
+};
+
 // ОНОВЛЕНО: Редагування повідомлення з детальними помилками
 const editMessage = async (req, res) => {
     try {
@@ -426,4 +474,4 @@ const setTyping = (req, res) => {
     res.json({ success: true });
 };
 
-module.exports = { getUsers, getUserProfileById, createChatInvite, redeemChatInvite, searchUsers, addContact, updateContact, deleteContact, sendMessage, getMessages, deleteConversation, editMessage, deleteMessage, pingStatus, setTyping };
+module.exports = { getUsers, getUserProfileById, createChatInvite, redeemChatInvite, searchUsers, addContact, updateContact, deleteContact, sendMessage, getMessages, deleteConversation, deleteDHConversation, acceptDHInvite, editMessage, deleteMessage, pingStatus, setTyping };

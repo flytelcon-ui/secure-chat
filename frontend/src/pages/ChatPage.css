@@ -1145,3 +1145,167 @@
     max-width: 94% !important;
   }
 }
+
+.chat-dh-badge {
+  margin-left: auto;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(72, 110, 94, 0.22);
+  border-radius: 20px;
+  padding: 7px 12px;
+  color: var(--chat-green);
+  background: #edf4e9;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-dh-badge.is-waiting {
+  color: #9a7541;
+  background: #f7f1df;
+  border-color: rgba(154, 117, 65, 0.25);
+}
+.chat-dh-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--chat-green);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.chat-dh-toggle input { accent-color: var(--chat-green); }
+.chat-dh-key-form {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0 8px;
+  text-align: left;
+}
+.chat-dh-key-form label {
+  color: var(--chat-ink);
+  font-size: 12px;
+  font-weight: 800;
+}
+.chat-dh-key-form input {
+ width: 100%;
+ box-sizing: border-box;
+ height: 56px;
+ border: 1px solid rgba(72, 110, 94, 0.25);
+ border-radius: 10px;
+ padding: 0 14px;
+ background: #fff;
+ color: var(--chat-ink);
+ font-family: Georgia, "Times New Roman", serif;
+ font-size: 24px;
+ font-weight: 700;
+ letter-spacing: 12px;
+ text-align: center;
+ outline: none;
+}
+.chat-dh-key-form input:focus {
+ border-color: var(--chat-green);
+ box-shadow: 0 0 0 3px rgba(72, 110, 94, 0.12);
+}
+.chat-dh-key-form button {
+ min-height: 48px;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--chat-green);
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-dh-waiting { color: var(--chat-muted); font-size: 12px; }
+.chat-dh-waiting-state {
+  min-height: 118px;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 18px;
+  border: 1px solid rgba(72, 110, 94, 0.16);
+  border-radius: 10px;
+  background: #edf4e9;
+  color: var(--chat-green);
+}
+.chat-dh-waiting-state span { font-size: 30px; }
+.chat-dh-waiting-state p { max-width: 260px; margin: 0; font-size: 13px; font-weight: 700; line-height: 1.45; }
+.chat-dh-invite-card {
+  width: min(100%, 520px);
+  box-sizing: border-box;
+  align-self: center;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  color: var(--chat-ink);
+  background: #fffdf6;
+  border: 1px solid rgba(72, 110, 94, 0.22);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(33, 51, 46, 0.1);
+}
+.chat-dh-invite-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: #edf4e9;
+  font-size: 22px;
+}
+.chat-dh-invite-copy { min-width: 0; }
+.chat-dh-invite-copy strong { font-size: 14px; }
+.chat-dh-invite-copy p {
+  margin: 4px 0 0;
+  color: var(--chat-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.chat-dh-invite-card > button {
+  grid-column: 2;
+  justify-self: start;
+  min-height: 38px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 14px;
+  color: #fff;
+  background: var(--chat-green);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chat-dh-invite-card > button:hover { filter: brightness(1.08); }
+@media (max-width: 520px) {
+  .chat-dh-invite-card { gap: 9px; padding: 12px; }
+  .chat-dh-invite-card > button { grid-column: 1 / -1; width: 100%; }
+}
+.chat-dh-dialog {
+  width: min(430px, calc(100vw - 32px)) !important;
+  max-height: calc(100vh - 32px);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.chat-dh-emojis {
+  min-height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 14px 0 8px;
+  border-radius: 12px;
+  background: #edf4e9;
+  font-size: 34px;
+}
+.chat-dh-details { display: grid; gap: 7px; margin-top: 12px; text-align: left; }
+.chat-dh-details small { color: var(--chat-muted); font-weight: 800; }
+.chat-dh-details code {
+  overflow-wrap: anywhere;
+  padding: 8px;
+  border-radius: 7px;
+  background: #f3f5ef;
+  font-size: 11px;
+}

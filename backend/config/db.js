@@ -9,11 +9,18 @@ const pool = new Pool({
 });
 
 // Робимо найпростіший тестовий запит до БД при запуску сервера
-pool.query('SELECT NOW()', (err, res) => {
+pool.query('SELECT NOW()', async (err, res) => {
     if (err) {
         console.error('❌ Помилка підключення до бази даних:', err.message);
-    } else {
-        console.log('✅ Підключено до бази даних PostgreSQL успішно!');
+        return;
+    }
+
+    console.log('✅ Підключено до бази даних PostgreSQL успішно!');
+    try {
+        await pool.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS public_key TEXT');
+        console.log('✅ Колонку users.public_key перевірено');
+    } catch (migrationError) {
+        console.error('❌ Не вдалося перевірити users.public_key:', migrationError.message);
     }
 });
 

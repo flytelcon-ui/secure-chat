@@ -22,6 +22,7 @@ function LoginPage() {
             // Зберігаємо токен і логін, які повернув бекенд
             localStorage.setItem('token', res.data.token);
             localStorage.setItem('username', res.data.username);
+            if (res.data.userId) localStorage.setItem('userId', String(res.data.userId));
             
             navigate(returnPath, { replace: true });
         } catch (err) {

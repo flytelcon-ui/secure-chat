@@ -18,6 +18,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Використовуємо маршрути
 app.use('/api/auth', authRoutes);
+app.use('/api/users', authRoutes);
 app.use('/api/messages', messageRoutes);
 
 app.get('/', (req, res) => {

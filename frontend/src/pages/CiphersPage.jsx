@@ -37,6 +37,16 @@ const cipherDetails = [
         icon: '↔'
     },
     {
+        id: 'dh',
+        name: 'Діффі–Геллман',
+        shortName: 'DH',
+        description: 'Окремий чат із обміном ключем. Кожен користувач вводить власне трицифрове число, після чого браузери обчислюють спільний секрет.',
+        how: 'Кожен учасник формує відкритий ключ із 3-цифрового числа. Після обміну обидва отримують однаковий спільний секрет для шифрування.',
+        example: '321 і 415 → однаковий спільний ключ',
+        color: 'violet',
+        icon: 'DH'
+    },
+    {
         id: 'sdes',
         name: 'S-DES (блоковий)',
         shortName: 'S-DES',
@@ -75,7 +85,9 @@ function CiphersPage() {
     const hasValidSDESKey = /^[01]{10}$/.test(sdesKeyValue);
     const hasTranspositionKey = Boolean(country.trim() && city.trim() && transpositionKey.replace(/[^\p{L}]/gu, ''));
     const encryptedText = useMemo(
-        () => (activeCipher === 'transposition' && !isLocationVerified) || (activeCipher === 'sdes' && !hasValidSDESKey)
+        () => activeCipher === 'dh'
+            ? 'Окремий DH-чат: введіть трицифрове число з співрозмовником'
+            : (activeCipher === 'transposition' && !isLocationVerified) || (activeCipher === 'sdes' && !hasValidSDESKey)
             ? ''
             : encryptMessage(sampleText, activeCipher, demoKey),
         [sampleText, activeCipher, demoKey, isLocationVerified, hasValidSDESKey]
