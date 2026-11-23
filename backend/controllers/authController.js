@@ -156,6 +156,26 @@ const changePassword = async (req, res) => {
     }
 };
 
+const refreshToken = async (req, res) => {
+    try {
+        const user = await pool.query(
+            'SELECT id, username FROM users WHERE id = $1',
+            [req.user.userId]
+        );
+        if (!user.rows.length) return res.status(404).json({ message: 'Користувача не знайдено' });
+
+        const token = jwt.sign(
+            { userId: user.rows[0].id },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+        res.json({ token });
+    } catch (err) {
+        console.error('Не вдалося оновити JWT:', err.message);
+        res.status(500).json({ message: 'Не вдалося оновити токен' });
+    }
+};
+
 const setPublicKey = async (req, res) => {
     const publicKey = typeof req.body.publicKey === 'string' ? req.body.publicKey.trim() : '';
     if (!/^\d+$/.test(publicKey) || BigInt(publicKey) < 1n || BigInt(publicKey) >= 101n) {
@@ -174,4 +194,4 @@ const setPublicKey = async (req, res) => {
     }
 };
 
-module.exports = { register, login, getProfile, updateProfile, changePassword, setPublicKey };
+module.exports = { register, login, getProfile, updateProfile, changePassword, refreshToken, setPublicKey };

@@ -28,6 +28,10 @@ function ProfilePage() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [profileError, setProfileError] = useState('');
     const [profileSuccess, setProfileSuccess] = useState('');
+    const [token, setToken] = useState(() => localStorage.getItem('token') || '');
+    const [isTokenVisible, setIsTokenVisible] = useState(false);
+    const [tokenStatus, setTokenStatus] = useState('');
+    const [isRefreshingToken, setIsRefreshingToken] = useState(false);
     const [profileShareStatus, setProfileShareStatus] = useState('');
     const [profileInviteUrl, setProfileInviteUrl] = useState('');
     const [isCreatingInvite, setIsCreatingInvite] = useState(false);
@@ -36,8 +40,6 @@ function ProfilePage() {
     const [isSavingProfile, setIsSavingProfile] = useState(false);
     const [isSavingPassword, setIsSavingPassword] = useState(false);
     const navigate = useNavigate();
-    const token = localStorage.getItem('token');
-
     useEffect(() => {
         if (!token) {
             navigate('/login');
@@ -229,6 +231,37 @@ function ProfilePage() {
         }
     };
 
+    const handleRefreshToken = async () => {
+        setIsRefreshingToken(true);
+        setTokenStatus('');
+        try {
+            const response = await api.post('/auth/token/refresh', {}, { headers: authHeaders(token) });
+            localStorage.setItem('token', response.data.token);
+            setToken(response.data.token);
+            setIsTokenVisible(false);
+            setTokenStatus('Створено новий токен на 24 години. Старий токен діє до завершення свого строку.');
+        } catch (error) {
+            if (error.response?.status === 401) {
+                localStorage.clear();
+                navigate('/login');
+                return;
+            }
+            setTokenStatus(error.response?.data?.message || 'Не вдалося оновити токен.');
+        } finally {
+            setIsRefreshingToken(false);
+        }
+    };
+
+    const handleCopyToken = async () => {
+        try {
+            await navigator.clipboard.writeText(token);
+            setTokenStatus('Токен скопійовано. Не передавайте його іншим.');
+        } catch {
+            setTokenStatus('Не вдалося скопіювати токен. Виділіть його в полі вручну.');
+            setIsTokenVisible(true);
+        }
+    };
+
     return (
         <div className="auth-page profile-page">
             <SiteHeader />
@@ -264,6 +297,34 @@ function ProfilePage() {
                                 <p className="profile-share-note">Одноразове посилання дійсне 7 днів.</p>
                                 {profileShareStatus && <p role="status">{profileShareStatus}</p>}
                             </div>
+                            <section className="profile-token-panel" aria-labelledby="profile-token-title">
+                                <div className="profile-token-heading">
+                                    <div>
+                                        <h3 id="profile-token-title">JWT токен доступу</h3>
+                                        <p>Це секретний ключ входу до акаунта. Не надсилайте його іншим.</p>
+                                    </div>
+                                </div>
+                                <input
+                                    className="profile-token-value"
+                                    type={isTokenVisible ? 'text' : 'password'}
+                                    value={token}
+                                    readOnly
+                                    aria-label="Ваш JWT токен"
+                                    autoComplete="off"
+                                    spellCheck="false"
+                                    onFocus={event => event.target.select()}
+                                />
+                                <div className="profile-token-actions">
+                                    <button type="button" onClick={() => setIsTokenVisible(current => !current)}>
+                                        {isTokenVisible ? 'Приховати' : 'Показати'}
+                                    </button>
+                                    <button type="button" onClick={handleCopyToken} disabled={!token}>Копіювати</button>
+                                    <button type="button" onClick={handleRefreshToken} disabled={isRefreshingToken}>
+                                        {isRefreshingToken ? 'Оновлення…' : 'Оновити токен'}
+                                    </button>
+                                </div>
+                                {tokenStatus && <p className="profile-token-status" role="status">{tokenStatus}</p>}
+                            </section>
                             <form className="auth-form profile-form" onSubmit={handleProfileSave}>
                                 <label htmlFor="profile-username">Логін</label>
                                 <input
